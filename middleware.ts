@@ -33,7 +33,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+
+  // /register is removed — public sign-up is disabled, admins register students directly
+  if (pathname.startsWith("/register")) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const isAuthRoute = pathname.startsWith("/login");
 
   if (!user && !isAuthRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
