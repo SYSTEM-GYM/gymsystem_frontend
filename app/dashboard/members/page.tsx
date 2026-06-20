@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/Card";
 import { RegisterStudentTrigger } from "./RegisterStudentTrigger";
 import { MembersTable, type MemberRow } from "./MembersTable";
-import { UsersIcon } from "@heroicons/react/24/outline";
+import { UsersIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 export default async function MembersPage() {
   const authClient = await createClient();
@@ -12,6 +12,40 @@ export default async function MembersPage() {
     data: { user },
   } = await authClient.auth.getUser();
   if (!user) redirect("/login");
+
+  // Fetch the admin's own profile to check gym assignment
+  const { data: adminProfile } = await authClient
+    .from("users")
+    .select("role, home_gym_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!adminProfile || adminProfile.role !== "admin") redirect("/login");
+
+  // Warn if admin has no gym assigned yet
+  if (!adminProfile.home_gym_id) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-1">
+            Gerenciamento
+          </p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Membros</h1>
+        </div>
+        <div className="flex items-start gap-3 p-5 bg-yellow-500/10 border border-yellow-500/20 rounded-3xl">
+          <ExclamationTriangleIcon className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-yellow-300">
+            Atenção: Você precisa cadastrar e vincular uma Filial ao seu perfil de Admin antes de
+            gerenciar membros. Acesse{" "}
+            <a href="/dashboard/settings?tab=gyms" className="underline font-semibold">
+              Configurações → Filiais
+            </a>{" "}
+            para começar.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const admin = createAdminClient();
   const { data: members, error } = await admin
@@ -21,6 +55,10 @@ export default async function MembersPage() {
     )
     .order("created_at", { ascending: false })
     .returns<MemberRow[]>();
+
+  if (error) {
+    console.error("[Members Page Error]:", error);
+  }
 
   const totalActive   = members?.filter((m) => m.status === "active").length   ?? 0;
   const totalInactive = members?.filter((m) => m.status === "inactive").length ?? 0;
