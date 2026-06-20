@@ -7,10 +7,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { UserRole } from "@/app/dashboard/layout";
 import { getVisibleNavItems } from "./navItems";
+import { GymSelector } from "@/app/components/layout/GymSelector";
 
-type Props = { role: UserRole };
+type Gym = { id: string; name: string; city: string };
 
-export function MobileHeader({ role }: Props) {
+type Props = {
+  role: UserRole;
+  gyms?: Gym[];
+  currentGymId?: string | null;
+};
+
+export function MobileHeader({ role, gyms = [], currentGymId = null }: Props) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const navItems = getVisibleNavItems(role);
@@ -22,10 +29,15 @@ export function MobileHeader({ role }: Props) {
   return (
     <>
       {/* Sticky top bar */}
-      <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-5 py-3 bg-surface-1 border-b border-white/5">
+      <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-5 py-3 bg-surface-1 border-b border-white/5">
         <span className="text-base font-black tracking-tighter text-primary">
           SIMP
         </span>
+        {role === "admin" && gyms.length > 0 && (
+          <div className="flex-1 flex justify-center">
+            <GymSelector gyms={gyms} currentGymId={currentGymId} />
+          </div>
+        )}
         <button
           onClick={() => setOpen(true)}
           aria-label="Abrir menu"

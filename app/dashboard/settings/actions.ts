@@ -34,6 +34,27 @@ async function requireAdmin(): Promise<
   return { ok: true, userId: user.id };
 }
 
+// ── Set admin home gym ────────────────────────────────────────────────────────
+
+export async function setAdminHomeGym(gymId: string): Promise<SettingsActionState> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { status: "error", message: auth.message };
+
+  const authClient = await createClient();
+  const { error } = await authClient
+    .from("users")
+    .update({ home_gym_id: gymId, updated_at: new Date().toISOString() })
+    .eq("id", auth.userId);
+
+  if (error) {
+    console.error("setAdminHomeGym error:", error);
+    return { status: "error", message: "Erro ao selecionar filial." };
+  }
+
+  revalidatePath("/", "layout");
+  return { status: "success" };
+}
+
 // ── Gyms ─────────────────────────────────────────────────────────────────────
 
 export async function createGym(
