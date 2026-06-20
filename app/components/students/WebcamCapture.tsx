@@ -11,24 +11,27 @@ type Props = {
 type CameraState = "idle" | "streaming" | "captured" | "error";
 
 export function WebcamCapture({ onCapture, onClear }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [cameraState, setCameraState] = useState<CameraState>("idle");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const videoRef   = useRef<HTMLVideoElement>(null);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const streamRef  = useRef<MediaStream | null>(null);
+
+  const [cameraState,   setCameraState]   = useState<CameraState>("idle");
+  const [previewUrl,    setPreviewUrl]    = useState<string | null>(null);
+  const [errorMessage,  setErrorMessage]  = useState<string>("");
 
   const stopStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }, []);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopStream();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
-  }, [stopStream, previewUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopStream]);
 
   async function startCamera() {
     setErrorMessage("");
@@ -37,11 +40,28 @@ export function WebcamCapture({ onCapture, onClear }: Props) {
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+
+      const video = videoRef.current;
+      if (!video) throw new Error("video ref não disponível");
+
+      video.srcObject = stream;
+
+      // Wait for metadata so videoWidth/Height are populated before we allow capture
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => {
+          // Explicitly sync the element dimensions to the actual track resolution
+          video.width  = video.videoWidth;
+          video.height = video.videoHeight;
+          console.log("[WebcamCapture] stream ready:", video.videoWidth, "×", video.videoHeight);
+          resolve();
+        };
+      });
+
+      // Explicitly start playback — some browsers don't auto-play even with autoplay attr
+      await video.play();
       setCameraState("streaming");
-    } catch {
+    } catch (err) {
+      console.error("[WebcamCapture] startCamera error:", err);
       setErrorMessage(
         "Não foi possível acessar a câmera. Verifique as permissões do navegador."
       );
@@ -50,42 +70,71 @@ export function WebcamCapture({ onCapture, onClear }: Props) {
   }
 
   function capturePhoto() {
-    const video = videoRef.current;
+    const video  = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
 
-    canvas.width = video.videoWidth;
+    console.log("[WebcamCapture] capturePhoto called — video:", video, "canvas:", canvas);
+    if (!video || !canvas) {
+      console.error("[WebcamCapture] ref(s) missing — cannot capture");
+      return;
+    }
+
+    // Explicitly match canvas dimensions to the live video track resolution
+    canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
-    canvas.getContext("2d")!.drawImage(video, 0, 0);
+    console.log("[WebcamCapture] canvas sized:", canvas.width, "×", canvas.height);
 
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        stopStream();
+    try {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas 2d context unavailable");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      console.log("[WebcamCapture] drawImage complete");
+    } catch (err) {
+      console.error("[WebcamCapture] drawImage error:", err);
+      return;
+    }
 
-        const filename = `student-${Date.now()}.jpg`;
-        const file = new File([blob], filename, { type: "image/jpeg" });
+    try {
+      canvas.toBlob(
+        (blob) => {
+          console.log("[WebcamCapture] toBlob result:", blob);
+          if (!blob) {
+            console.error("[WebcamCapture] toBlob returned null — canvas may be empty or tainted");
+            return;
+          }
 
-        const url = URL.createObjectURL(blob);
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(url);
+          stopStream();
 
-        setCameraState("captured");
-        onCapture(file);
-      },
-      "image/jpeg",
-      0.92
-    );
+          const filename = `student-${Date.now()}.jpg`;
+          const file = new File([blob], filename, { type: "image/jpeg" });
+          console.log("[WebcamCapture] File created:", file.name, file.size, "bytes");
+
+          // Revoke previous preview URL before creating a new one
+          setPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(blob);
+          });
+
+          setCameraState("captured");
+          onCapture(file);
+        },
+        "image/jpeg",
+        0.92
+      );
+    } catch (err) {
+      console.error("[WebcamCapture] toBlob threw:", err);
+    }
   }
 
   function retake() {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     onClear();
     setCameraState("idle");
-    startCamera();
+    // Short delay so idle state renders (and videoRef is still mounted) before restarting
+    setTimeout(startCamera, 50);
   }
 
   return (
@@ -96,11 +145,23 @@ export function WebcamCapture({ onCapture, onClear }: Props) {
 
       {/* Video / Preview area */}
       <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-surface-2 border border-white/10 flex items-center justify-center">
-        {/* Hidden canvas used only for frame capture */}
+        {/* Canvas: always mounted (hidden), used only for frame capture */}
         <canvas ref={canvasRef} className="hidden" />
 
+        {/*
+          Video: always mounted so videoRef is valid when startCamera assigns srcObject.
+          Conditional rendering would cause the ref to be null at assignment time.
+        */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`w-full h-full object-cover ${cameraState === "streaming" ? "block" : "hidden"}`}
+        />
+
         {cameraState === "idle" && (
-          <div className="flex flex-col items-center gap-3 text-center p-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center p-4">
             <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center">
               <CameraIcon className="w-7 h-7 text-zinc-500" />
             </div>
@@ -115,18 +176,8 @@ export function WebcamCapture({ onCapture, onClear }: Props) {
           </div>
         )}
 
-        {cameraState === "streaming" && (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-        )}
-
         {cameraState === "captured" && previewUrl && (
-          <>
+          <div className="absolute inset-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewUrl}
@@ -136,11 +187,11 @@ export function WebcamCapture({ onCapture, onClear }: Props) {
             <div className="absolute top-3 right-3 bg-primary rounded-full p-1">
               <CheckCircleIcon className="w-5 h-5 text-black" />
             </div>
-          </>
+          </div>
         )}
 
         {cameraState === "error" && (
-          <div className="flex flex-col items-center gap-3 text-center p-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center p-4">
             <p className="text-sm text-danger">{errorMessage}</p>
             <button
               type="button"
