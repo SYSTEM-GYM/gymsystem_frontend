@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   PlusIcon,
   XMarkIcon,
@@ -27,10 +28,31 @@ type Props = {
 
 const INITIAL_STATE: SettingsActionState = { status: "idle" };
 
+// ── Submit Button ─────────────────────────────────────────────────────────────
+
+function SubmitButton({ videoType }: { videoType: "none" | "youtube" | "webm" }) {
+  const { pending } = useFormStatus();
+  const label = pending
+    ? videoType === "webm"
+      ? "Enviando vídeo..."
+      : "Salvando..."
+    : "Salvar";
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="flex-1 py-3 rounded-full text-sm font-bold bg-primary text-black disabled:opacity-40 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+    >
+      {label}
+    </button>
+  );
+}
+
 // ── Create Modal ──────────────────────────────────────────────────────────────
 
 function CreateExerciseModal({ onClose }: { onClose: () => void }) {
-  const [state, formAction, isPending] = useActionState(createExercise, INITIAL_STATE);
+  const [state, formAction] = useActionState(createExercise, INITIAL_STATE);
   const [videoType, setVideoType] = useState<"none" | "youtube" | "webm">("none");
 
   useEffect(() => {
@@ -142,27 +164,21 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* WebM upload placeholder */}
+            {/* WebM upload */}
             {videoType === "webm" && (
               <div>
                 <label htmlFor="ex-webm" className={labelClass}>
                   Arquivo de vídeo (WebM)
                 </label>
-                <div className="relative">
-                  <input
-                    id="ex-webm"
-                    name="webm_file"
-                    type="file"
-                    accept="video/webm"
-                    disabled
-                    className={`${inputClass} opacity-40 cursor-not-allowed`}
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-zinc-600 bg-surface-2 px-2 py-0.5 rounded-lg">
-                    Em breve
-                  </span>
-                </div>
+                <input
+                  id="ex-webm"
+                  name="webm_file"
+                  type="file"
+                  accept="video/webm"
+                  className={`${inputClass} file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer`}
+                />
                 <p className="mt-1.5 text-xs text-zinc-600">
-                  Upload via Supabase Storage será habilitado na próxima fase.
+                  Máximo 100 MB · somente formato .webm
                 </p>
               </div>
             )}
@@ -181,13 +197,7 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
               >
                 Cancelar
               </button>
-              <button
-                type="submit"
-                disabled={isPending}
-                className="flex-1 py-3 rounded-full text-sm font-bold bg-primary text-black disabled:opacity-40 hover:scale-[1.02] active:scale-[0.98] transition-transform"
-              >
-                {isPending ? "Salvando..." : "Salvar"}
-              </button>
+              <SubmitButton videoType={videoType} />
             </div>
           </form>
         </div>

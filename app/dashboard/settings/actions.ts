@@ -67,6 +67,9 @@ export async function createGym(
 
 // ── Exercises ─────────────────────────────────────────────────────────────────
 
+const EXERCISE_VIDEOS_BUCKET = "exercise-videos";
+const MAX_WEBM_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+
 export async function createExercise(
   _prev: SettingsActionState,
   formData: FormData
@@ -76,8 +79,9 @@ export async function createExercise(
 
   const title = (formData.get("title") as string).trim();
   const description = (formData.get("description") as string | null)?.trim() || null;
-  const videoType = formData.get("video_type") as "youtube" | "webm" | null;
+  const videoType = formData.get("video_type") as "youtube" | "webm" | "none" | null;
   const youtubeUrl = (formData.get("youtube_url") as string | null)?.trim() || null;
+  const webmFile = formData.get("webm_file") as File | null;
 
   if (!title) return { status: "error", message: "Título do exercício é obrigatório." };
 
@@ -86,21 +90,63 @@ export async function createExercise(
       youtubeUrl.startsWith("https://www.youtube.com/") ||
       youtubeUrl.startsWith("https://youtu.be/");
     if (!isValidYoutube) {
-      return { status: "error", message: "URL do YouTube inválida. Use https://www.youtube.com/... ou https://youtu.be/..." };
+      return {
+        status: "error",
+        message: "URL do YouTube inválida. Use https://www.youtube.com/... ou https://youtu.be/...",
+      };
     }
   }
 
   const admin = createAdminClient();
+  let webmPath: string | null = null;
+
+  // Upload WebM to Supabase Storage when a file is provided
+  if (videoType === "webm" && webmFile && webmFile.size > 0) {
+    if (webmFile.size > MAX_WEBM_SIZE_BYTES) {
+      return { status: "error", message: "O arquivo de vídeo não pode ultrapassar 100 MB." };
+    }
+
+    if (webmFile.type !== "video/webm") {
+      return { status: "error", message: "Apenas arquivos no formato WebM são aceitos." };
+    }
+
+    const filename = `${crypto.randomUUID()}.webm`;
+    const buffer = Buffer.from(await webmFile.arrayBuffer());
+
+    const { error: uploadError } = await admin.storage
+      .from(EXERCISE_VIDEOS_BUCKET)
+      .upload(filename, buffer, {
+        contentType: "video/webm",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("createExercise upload error:", uploadError);
+      return { status: "error", message: "Erro ao enviar o vídeo. Tente novamente." };
+    }
+
+    const { data: urlData } = admin.storage
+      .from(EXERCISE_VIDEOS_BUCKET)
+      .getPublicUrl(filename);
+
+    webmPath = urlData.publicUrl;
+  }
+
   const { error } = await admin.from("exercises").insert({
     title,
     description,
     youtube_url: videoType === "youtube" ? youtubeUrl : null,
-    webm_path: null, // Supabase Storage upload will be wired in the next phase
+    webm_path: webmPath,
     created_by: auth.userId,
   });
 
   if (error) {
-    console.error("createExercise error:", error);
+    console.error("createExercise db error:", error);
+    // Clean up the uploaded file if the DB insert failed
+    if (webmPath) {
+      const filename = webmPath.split("/").pop()!;
+      await admin.storage.from(EXERCISE_VIDEOS_BUCKET).remove([filename]);
+    }
     return { status: "error", message: "Erro ao criar exercício. Tente novamente." };
   }
 
