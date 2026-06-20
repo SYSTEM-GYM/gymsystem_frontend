@@ -1,25 +1,32 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   MagnifyingGlassIcon,
   EllipsisVerticalIcon,
   UserCircleIcon,
-  LockClosedIcon,
   NoSymbolIcon,
 } from "@heroicons/react/24/outline";
-import {
-  StudentProfileDrawer,
-  type MemberProfile,
-} from "@/app/components/students/StudentProfileDrawer";
 import { updateMemberStatus } from "./actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type MemberRow = MemberProfile & {
+export type MemberRow = {
+  id: string;
+  full_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  photo_url: string | null;
   phone: string | null;
+  cpf: string | null;
+  birth_date: string | null;
+  weight: number | null;
+  height: number | null;
   plan_type: string;
+  status: string;
   experience_points: number;
+  medical_notes: string | null;
   created_at: string;
 };
 
@@ -47,32 +54,26 @@ const PLAN_LABELS: Record<string, string> = {
 
 // ── Row Action Dropdown ───────────────────────────────────────────────────────
 
-function ActionDropdown({
-  member,
-  onViewProfile,
-}: {
-  member: MemberRow;
-  onViewProfile: () => void;
-}) {
-  const [open, setOpen]     = useState(false);
-  const [blocking, setBlocking] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+function ActionDropdown({ member }: { member: MemberRow }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
 
   const isBanned = member.status === "banned";
 
-  async function handleBanToggle() {
-    setBlocking(true);
+  function handleBanToggle() {
     setOpen(false);
-    await updateMemberStatus(member.id, isBanned ? "active" : "banned");
-    setBlocking(false);
+    startTransition(async () => {
+      await updateMemberStatus(member.id, isBanned ? "active" : "banned");
+    });
   }
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <div className="relative inline-block">
       <button
         onClick={() => setOpen((v) => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        disabled={blocking}
+        disabled={pending}
         className="p-1.5 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors disabled:opacity-40"
         aria-label="Ações"
       >
@@ -81,27 +82,16 @@ function ActionDropdown({
 
       {open && (
         <div className="absolute right-0 top-full mt-1 w-44 bg-surface-1 border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-30">
-          {/* Ver Ficha */}
           <button
-            onMouseDown={() => { setOpen(false); onViewProfile(); }}
+            onMouseDown={() => { setOpen(false); router.push(`/dashboard/members/${member.id}`); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
           >
             <UserCircleIcon className="w-4 h-4 flex-shrink-0" />
             Ver Ficha
           </button>
 
-          {/* Redefinir Senha — opens profile drawer on password tab */}
-          <button
-            onMouseDown={() => { setOpen(false); onViewProfile(); }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
-          >
-            <LockClosedIcon className="w-4 h-4 flex-shrink-0" />
-            Redefinir Senha
-          </button>
-
           <div className="h-px bg-white/5 mx-3" />
 
-          {/* Bloquear / Banir */}
           <button
             onMouseDown={handleBanToggle}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-danger hover:bg-danger/10 transition-colors text-left"
@@ -118,14 +108,14 @@ function ActionDropdown({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function MembersTable({ members }: Props) {
-  const [search, setSearch]               = useState("");
-  const [profileMember, setProfileMember] = useState<MemberRow | null>(null);
+  const router = useRouter();
+  const [search, setSearch] = useState("");
 
   const query = search.trim().toLowerCase();
   const filtered = query
     ? members.filter(
         (m) =>
-          m.full_name.toLowerCase().includes(query) ||
+          (m.full_name ?? "").toLowerCase().includes(query) ||
           (m.cpf ?? "").replace(/\D/g, "").includes(query.replace(/\D/g, ""))
       )
     : members;
@@ -179,7 +169,8 @@ export function MembersTable({ members }: Props) {
                 {filtered.map((member) => (
                   <tr
                     key={member.id}
-                    className="hover:bg-surface-2/50 transition-colors group"
+                    onClick={() => router.push(`/dashboard/members/${member.id}`)}
+                    className="hover:bg-surface-2/50 transition-colors group cursor-pointer"
                   >
                     {/* Aluno */}
                     <td className="px-6 py-4">
@@ -193,7 +184,7 @@ export function MembersTable({ members }: Props) {
                           />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0 text-xs font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
-                            {member.full_name?.charAt(0).toUpperCase() ?? "?"}
+                            {(member.full_name ?? "?").charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div>
@@ -233,11 +224,11 @@ export function MembersTable({ members }: Props) {
                     </td>
 
                     {/* Ações */}
-                    <td className="px-6 py-4 text-right">
-                      <ActionDropdown
-                        member={member}
-                        onViewProfile={() => setProfileMember(member)}
-                      />
+                    <td
+                      className="px-6 py-4 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ActionDropdown member={member} />
                     </td>
                   </tr>
                 ))}
@@ -253,12 +244,6 @@ export function MembersTable({ members }: Props) {
           </div>
         )}
       </div>
-
-      {/* Profile Drawer */}
-      <StudentProfileDrawer
-        member={profileMember}
-        onClose={() => setProfileMember(null)}
-      />
     </>
   );
 }

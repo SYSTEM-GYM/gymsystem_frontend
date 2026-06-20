@@ -225,3 +225,48 @@ export async function registerStudent(
   revalidatePath("/dashboard/members");
   return { status: "success", studentName: `${firstName} ${lastName}` };
 }
+
+// ── Create physical assessment ─────────────────────────────────────────────────
+
+export async function createPhysicalAssessment(
+  userId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const date              = (formData.get("date") as string) || new Date().toISOString().split("T")[0];
+  const weightRaw         = ((formData.get("weight") as string) ?? "").replace(",", ".");
+  const heightRaw         = ((formData.get("height") as string) ?? "").replace(",", ".");
+  const bodyFatRaw        = ((formData.get("body_fat_percentage") as string) ?? "").replace(",", ".");
+  const leanMassRaw       = ((formData.get("lean_mass") as string) ?? "").replace(",", ".");
+  const notes             = ((formData.get("notes") as string) ?? "").trim() || null;
+
+  const weight            = weightRaw ? parseFloat(weightRaw) : null;
+  const height            = heightRaw ? parseFloat(heightRaw) : null;
+  const body_fat_percentage = bodyFatRaw ? parseFloat(bodyFatRaw) : null;
+  const lean_mass         = leanMassRaw ? parseFloat(leanMassRaw) : null;
+
+  if (!weight && !height) {
+    return { ok: false, error: "Informe pelo menos peso ou altura." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("physical_assessments").insert({
+    user_id: userId,
+    date,
+    weight,
+    height,
+    body_fat_percentage,
+    lean_mass,
+    notes,
+  });
+
+  if (error) {
+    console.error("createPhysicalAssessment error:", error);
+    return { ok: false, error: "Erro ao salvar avaliação. Tente novamente." };
+  }
+
+  revalidatePath(`/dashboard/members/${userId}`);
+  return { ok: true };
+}
