@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Routes that require admin or trainer role
-const ADMIN_ONLY_ROUTES = ["/dashboard/members", "/dashboard/finance"];
+const ADMIN_ONLY_ROUTES = ["/dashboard/members", "/dashboard/finance", "/dashboard/settings"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
