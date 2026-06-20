@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { XMarkIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 import { WebcamCapture } from "./WebcamCapture";
 import {
   registerStudent,
@@ -10,6 +9,7 @@ import {
 } from "@/app/dashboard/members/actions";
 
 // ── Submit Button ─────────────────────────────────────────────────────────────
+// Must be a child of <form> so useFormStatus can read the pending state.
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -38,9 +38,7 @@ function calculateAge(birthDate: string): number | null {
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
 
-type Props = {
-  onClose: () => void;
-};
+type Props = { onClose: () => void };
 
 const INITIAL_STATE: RegisterStudentState = { status: "idle" };
 
@@ -49,76 +47,75 @@ export function StudentForm({ onClose }: Props) {
   const [birthDate, setBirthDate] = useState("");
   const [capturedPhoto, setCapturedPhoto] = useState<File | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
 
   const age = calculateAge(birthDate);
 
-  // Sync the captured photo File into a hidden input via DataTransfer
+  // Sync the webcam-captured File into the hidden file input via DataTransfer
   useEffect(() => {
     if (!photoInputRef.current) return;
-    if (capturedPhoto) {
-      const dt = new DataTransfer();
-      dt.items.add(capturedPhoto);
-      photoInputRef.current.files = dt.files;
-    } else {
-      photoInputRef.current.files = new DataTransfer().files;
-    }
+    const dt = new DataTransfer();
+    if (capturedPhoto) dt.items.add(capturedPhoto);
+    photoInputRef.current.files = dt.files;
   }, [capturedPhoto]);
 
-  // Close on success after a short delay so user sees the feedback
+  // Close after success (short delay so the user reads the confirmation)
   useEffect(() => {
-    if (state.status === "success") {
-      const t = setTimeout(onClose, 1200);
-      return () => clearTimeout(t);
-    }
+    if (state.status !== "success") return;
+    const t = setTimeout(onClose, 1400);
+    return () => clearTimeout(t);
   }, [state.status, onClose]);
 
   const inputClass =
     "w-full bg-surface-2 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
   const labelClass =
     "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2";
+  const sectionHeadClass =
+    "text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2";
 
   return (
-    <form ref={formRef} action={formAction} className="flex flex-col h-full">
-      {/* Hidden file input for the captured photo */}
+    /*
+      flex-1 min-h-0: fills the remaining height in the aside flex column
+      without overflowing (min-h-0 overrides the default min-height: auto
+      that would cause the flex item to size to its content).
+    */
+    <form action={formAction} className="flex flex-col flex-1 min-h-0">
+      {/* Hidden file input — populated via DataTransfer from WebcamCapture */}
       <input
         ref={photoInputRef}
         type="file"
         name="photo_file"
         accept="image/jpeg"
         className="hidden"
-        readOnly
+        aria-hidden
       />
 
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+      {/* ── Scrollable body ───────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 min-h-0">
 
-        {/* Personal info */}
+        {/* Dados Pessoais */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
-            Dados Pessoais
-          </h3>
+          <h3 className={sectionHeadClass}>Dados Pessoais</h3>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="sf-first-name" className={labelClass}>Nome</label>
+              <label htmlFor="sf-first-name" className={labelClass}>Nome *</label>
               <input
                 id="sf-first-name"
                 name="first_name"
                 type="text"
                 placeholder="João"
-                required
+                autoComplete="given-name"
                 className={inputClass}
               />
             </div>
             <div>
-              <label htmlFor="sf-last-name" className={labelClass}>Sobrenome</label>
+              <label htmlFor="sf-last-name" className={labelClass}>Sobrenome *</label>
               <input
                 id="sf-last-name"
                 name="last_name"
                 type="text"
                 placeholder="Silva"
-                required
+                autoComplete="family-name"
                 className={inputClass}
               />
             </div>
@@ -138,7 +135,7 @@ export function StudentForm({ onClose }: Props) {
                 className={`${inputClass} [color-scheme:dark]`}
               />
             </div>
-            <div className="flex flex-col justify-end pb-0">
+            <div className="flex flex-col justify-end">
               {age !== null ? (
                 <div className="flex items-end gap-1 px-4 py-3 bg-surface-2 border border-white/10 rounded-2xl">
                   <span className="text-2xl font-bold text-primary tabular-nums leading-none">
@@ -156,20 +153,21 @@ export function StudentForm({ onClose }: Props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="sf-cpf" className={labelClass}>CPF</label>
+              <label htmlFor="sf-cpf" className={labelClass}>CPF *</label>
               <input
                 id="sf-cpf"
                 name="cpf"
                 type="text"
+                inputMode="numeric"
                 placeholder="000.000.000-00"
                 maxLength={14}
-                required
                 className={inputClass}
               />
             </div>
             <div>
               <label htmlFor="sf-phone" className={labelClass}>
-                Telefone <span className="text-zinc-600 normal-case">(opcional)</span>
+                Telefone{" "}
+                <span className="text-zinc-600 normal-case font-normal">(opcional)</span>
               </label>
               <input
                 id="sf-phone"
@@ -182,12 +180,9 @@ export function StudentForm({ onClose }: Props) {
           </div>
         </section>
 
-        {/* Physical data */}
+        {/* Dados Físicos */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
-            Dados Físicos
-          </h3>
-
+          <h3 className={sectionHeadClass}>Dados Físicos</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="sf-weight" className={labelClass}>Peso (kg)</label>
@@ -214,44 +209,39 @@ export function StudentForm({ onClose }: Props) {
           </div>
         </section>
 
-        {/* Account credentials */}
+        {/* Acesso à Plataforma */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
-            Acesso à Plataforma
-          </h3>
-
+          <h3 className={sectionHeadClass}>Acesso à Plataforma</h3>
           <div>
-            <label htmlFor="sf-email" className={labelClass}>E-mail</label>
+            <label htmlFor="sf-email" className={labelClass}>E-mail *</label>
             <input
               id="sf-email"
               name="email"
               type="email"
               placeholder="joao@email.com"
-              required
+              autoComplete="email"
               className={inputClass}
             />
           </div>
-
           <div>
             <label htmlFor="sf-temp-password" className={labelClass}>
-              Senha Provisória
+              Senha Provisória *
             </label>
             <input
               id="sf-temp-password"
               name="temp_password"
               type="password"
               placeholder="Mínimo 8 caracteres"
-              minLength={8}
-              required
+              autoComplete="new-password"
               className={inputClass}
             />
             <p className="mt-1.5 text-xs text-zinc-600">
-              O aluno poderá alterar a senha após o primeiro acesso.
+              O aluno poderá alterar após o primeiro acesso.
             </p>
           </div>
         </section>
 
-        {/* Webcam capture */}
+        {/* Foto via Webcam */}
         <section>
           <WebcamCapture
             onCapture={(file) => setCapturedPhoto(file)}
@@ -259,27 +249,26 @@ export function StudentForm({ onClose }: Props) {
           />
           {!capturedPhoto && (
             <p className="mt-2 text-xs text-zinc-600">
-              A foto é opcional, mas recomendada para reconhecimento facial.
+              Opcional, mas recomendada para reconhecimento facial.
             </p>
           )}
         </section>
 
-        {/* Success / Error feedback */}
+        {/* Feedback — error or success */}
         {state.status === "error" && (
-          <p className="text-sm text-danger bg-danger/10 border border-danger/20 rounded-2xl px-4 py-3">
+          <div className="text-sm text-danger bg-danger/10 border border-danger/20 rounded-2xl px-4 py-3">
             {state.message}
-          </p>
+          </div>
         )}
-
         {state.status === "success" && (
-          <p className="text-sm text-primary bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3">
+          <div className="text-sm text-primary bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3">
             ✓ {state.studentName} matriculado com sucesso!
-          </p>
+          </div>
         )}
       </div>
 
-      {/* Footer actions */}
-      <div className="flex gap-3 px-6 py-5 border-t border-white/5 flex-shrink-0">
+      {/* ── Sticky footer — always visible ───────────────────────────────── */}
+      <div className="flex gap-3 px-6 py-5 border-t border-white/5 flex-shrink-0 bg-surface-1">
         <button
           type="button"
           onClick={onClose}
