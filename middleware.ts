@@ -4,6 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 // Routes that require admin or trainer role
 const ADMIN_ONLY_ROUTES = ["/dashboard/members", "/dashboard/finance", "/dashboard/settings"];
 
+// Routes that require any authenticated user
+const APP_ROUTES = ["/app"];
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -42,31 +45,47 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = pathname.startsWith("/login");
 
   if (!user && !isAuthRoute) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    // Protect both /dashboard and /app
+    const isProtected =
+      pathname.startsWith("/dashboard") ||
+      APP_ROUTES.some((r) => pathname.startsWith(r));
+    if (isProtected) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
   }
 
   if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Role-based post-login redirect: customers → /app, everyone else → /dashboard
+    const { data: profile } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const role = profile?.role ?? "customer";
+    const destination = role === "customer" ? "/app" : "/dashboard";
+    return NextResponse.redirect(new URL(destination, request.url));
   }
 
-  // RBAC: check role before allowing access to protected routes
-  if (user) {
-    const isProtectedRoute = ADMIN_ONLY_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
+  // RBAC: block customers from /dashboard entirely
+  if (user && pathname.startsWith("/dashboard")) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-    if (isProtectedRoute) {
-      const { data: profile } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
+    const role = profile?.role ?? "customer";
 
-      const role = profile?.role ?? "customer";
+    // Customers belong in /app, not the admin/trainer dashboard
+    if (role === "customer") {
+      return NextResponse.redirect(new URL("/app", request.url));
+    }
 
-      if (role !== "admin" && role !== "trainer") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
+    // Trainers and admins: enforce admin-only sub-routes
+    const isAdminOnly = ADMIN_ONLY_ROUTES.some((route) => pathname.startsWith(route));
+    if (isAdminOnly && role !== "admin" && role !== "trainer") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
