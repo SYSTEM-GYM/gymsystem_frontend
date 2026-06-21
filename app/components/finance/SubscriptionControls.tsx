@@ -5,11 +5,11 @@ import {
   generateMonthlyInvoices,
   markOverdueInvoices,
   markInvoiceAsPaid,
-  buildWhatsAppUrl,
   createPlan,
   type InvoiceRow,
   type GymPlan,
 } from "@/app/dashboard/finance/subscription-actions";
+import { buildWhatsAppUrl } from "@/lib/finance-utils";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
