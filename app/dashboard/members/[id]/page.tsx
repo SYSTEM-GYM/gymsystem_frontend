@@ -118,19 +118,44 @@ export default async function MemberProfilePage({
     .limit(60)
     .returns<OccupancyLog[]>();
 
-  const { data: collections } = await admin
+  const { data: collectionsRaw } = await admin
     .from("exercise_collections")
-    .select("id, name")
+    .select(
+      "id, name, description, estimated_duration_minutes, collection_exercises(sort_order, default_sets, default_reps, exercise:exercises(id, title, translated_name))",
+    )
     .order("name", { ascending: true });
+
+  type RawCollEx = {
+    sort_order: number;
+    default_sets: number;
+    default_reps: number;
+    exercise: { id: string; title: string; translated_name: string | null } | { id: string; title: string; translated_name: string | null }[] | null;
+  };
+
+  const collections = (collectionsRaw ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: (c as { description?: string | null }).description ?? null,
+    estimated_duration_minutes: (c as { estimated_duration_minutes?: number }).estimated_duration_minutes ?? 60,
+    exercises: ((c as { collection_exercises?: RawCollEx[] }).collection_exercises ?? [])
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((ce) => ({
+        sort_order: ce.sort_order,
+        default_sets: ce.default_sets,
+        default_reps: ce.default_reps,
+        exercise: Array.isArray(ce.exercise) ? (ce.exercise[0] ?? null) : ce.exercise,
+      })),
+  }));
 
   const { data: schedulesRaw } = await admin
     .from("workout_schedules")
-    .select("id, schedule_type, day_of_week, session_label, collection:exercise_collections(name)")
+    .select("id, schedule_type, day_of_week, session_label, created_at, collection:exercise_collections(name)")
     .eq("user_id", id)
     .order("sort_order", { ascending: true });
 
   const schedules = (schedulesRaw ?? []).map((s) => ({
     ...s,
+    created_at: (s as { created_at?: string }).created_at ?? null,
     collection: Array.isArray(s.collection) ? s.collection[0] ?? null : s.collection,
   }));
 

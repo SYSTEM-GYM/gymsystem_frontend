@@ -716,12 +716,25 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
 
 // ── Tab: Treinos ──────────────────────────────────────────────────────────────
 
-type WorkoutCollection = { id: string; name: string };
+type WorkoutCollectionExercise = {
+  sort_order: number;
+  default_sets: number;
+  default_reps: number;
+  exercise: { id: string; title: string; translated_name: string | null } | null;
+};
+type WorkoutCollection = {
+  id: string;
+  name: string;
+  description: string | null;
+  estimated_duration_minutes: number;
+  exercises: WorkoutCollectionExercise[];
+};
 type WorkoutSchedule = {
   id: string;
   schedule_type: string;
   day_of_week: number | null;
   session_label: string | null;
+  created_at: string | null;
   collection: { name: string } | null;
 };
 type ExecutionLog = {

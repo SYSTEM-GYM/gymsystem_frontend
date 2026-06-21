@@ -169,6 +169,27 @@ export async function reorderCollectionExercises(
   return { ok: true };
 }
 
+export async function unassignWorkoutSchedule(
+  scheduleId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, message: auth.message };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("workout_schedules")
+    .delete()
+    .eq("id", scheduleId);
+
+  if (error) {
+    console.error("unassignWorkoutSchedule:", error);
+    return { ok: false, message: "Erro ao remover cronograma." };
+  }
+
+  revalidatePath("/dashboard/members");
+  return { ok: true };
+}
+
 export async function assignWorkoutSchedule(input: {
   userId: string;
   collectionId: string;
