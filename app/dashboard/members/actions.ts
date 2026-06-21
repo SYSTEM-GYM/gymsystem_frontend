@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  isValidCPF,
+  parseAnamnesisData,
+  stripDigits,
+  type AnamnesisData,
+  type PlanType,
+} from "@/lib/member-utils";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
@@ -31,18 +38,50 @@ async function requireAdmin(): Promise<
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
+const PLAN_TYPES: PlanType[] = ["basic", "premium", "vip"];
+
+async function writeAuditLog(
+  actorId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.from("audit_logs").insert({
+    actor_id: actorId,
+    action,
+    resource_type: resourceType,
+    resource_id: resourceId,
+    metadata,
+  });
+  if (error) console.error("writeAuditLog error:", error);
+}
+
 // ── Update member status ──────────────────────────────────────────────────────
 
 export type MemberStatus = "active" | "inactive" | "banned";
 
 export async function updateMemberStatus(
   userId: string,
-  status: MemberStatus
+  status: MemberStatus,
+  previousStatus?: string
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return { ok: false, error: auth.error };
 
   const admin = createAdminClient();
+
+  let prior = previousStatus;
+  if (!prior) {
+    const { data: current } = await admin
+      .from("users")
+      .select("status")
+      .eq("id", userId)
+      .single();
+    prior = current?.status ?? "unknown";
+  }
+
   const { error } = await admin
     .from("users")
     .update({ status, updated_at: new Date().toISOString() })
@@ -53,7 +92,13 @@ export async function updateMemberStatus(
     return { ok: false, error: "Falha ao atualizar o status." };
   }
 
+  await writeAuditLog(auth.userId, "status_change", "user", userId, {
+    from: prior,
+    to: status,
+  });
+
   revalidatePath("/dashboard/members");
+  revalidatePath(`/dashboard/members/${userId}`);
   return { ok: true };
 }
 
@@ -91,28 +136,106 @@ export async function resetMemberPassword(
   return { ok: true };
 }
 
-// ── Update medical notes ──────────────────────────────────────────────────────
+// ── Update member profile fields ──────────────────────────────────────────────
 
-export async function updateMedicalNotes(
+export type MemberProfilePatch = {
+  cpf?: string;
+  phone?: string | null;
+  home_gym_id?: string | null;
+  plan_type?: PlanType;
+};
+
+export async function updateMemberProfile(
   userId: string,
-  notes: string
+  patch: MemberProfilePatch
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return { ok: false, error: auth.error };
 
+  const update: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (patch.cpf !== undefined) {
+    const cpf = stripDigits(patch.cpf);
+    if (cpf.length !== 11 || !isValidCPF(cpf)) {
+      return { ok: false, error: "CPF inválido." };
+    }
+    update.cpf = cpf;
+  }
+
+  if (patch.phone !== undefined) {
+    const phone = patch.phone ? stripDigits(patch.phone) : "";
+    update.phone = phone.length > 0 ? phone : null;
+  }
+
+  if (patch.home_gym_id !== undefined) {
+    update.home_gym_id = patch.home_gym_id || null;
+  }
+
+  if (patch.plan_type !== undefined) {
+    if (!PLAN_TYPES.includes(patch.plan_type)) {
+      return { ok: false, error: "Plano inválido." };
+    }
+    update.plan_type = patch.plan_type;
+  }
+
+  if (Object.keys(update).length === 1) {
+    return { ok: true };
+  }
+
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("users")
-    .update({ medical_notes: notes || null, updated_at: new Date().toISOString() })
-    .eq("id", userId);
+  const { error } = await admin.from("users").update(update).eq("id", userId);
 
   if (error) {
-    console.error("updateMedicalNotes error:", error);
-    return { ok: false, error: "Falha ao salvar observações." };
+    console.error("updateMemberProfile error:", error);
+    return { ok: false, error: "Falha ao salvar dados do aluno." };
   }
 
   revalidatePath("/dashboard/members");
+  revalidatePath(`/dashboard/members/${userId}`);
   return { ok: true };
+}
+
+// ── Update health / anamnesis ─────────────────────────────────────────────────
+
+export async function updateHealthData(
+  userId: string,
+  data: { medical_notes?: string; anamnesis_data?: AnamnesisData }
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const update: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (data.medical_notes !== undefined) {
+    update.medical_notes = data.medical_notes.trim() || null;
+  }
+
+  if (data.anamnesis_data !== undefined) {
+    update.anamnesis_data = data.anamnesis_data;
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("users").update(update).eq("id", userId);
+
+  if (error) {
+    console.error("updateHealthData error:", error);
+    return { ok: false, error: "Falha ao salvar dados de saúde." };
+  }
+
+  revalidatePath(`/dashboard/members/${userId}`);
+  return { ok: true };
+}
+
+/** @deprecated Use updateHealthData */
+export async function updateMedicalNotes(
+  userId: string,
+  notes: string
+): Promise<ActionResult> {
+  return updateHealthData(userId, { medical_notes: notes });
 }
 
 // ── Register student ──────────────────────────────────────────────────────────
@@ -135,8 +258,11 @@ export async function registerStudent(
   const firstName   = ((formData.get("first_name") as string) ?? "").trim();
   const lastName    = ((formData.get("last_name") as string) ?? "").trim();
   const email       = ((formData.get("email") as string) ?? "").trim().toLowerCase();
-  const cpf         = ((formData.get("cpf") as string) ?? "").trim().replace(/\D/g, "");
-  const phone       = ((formData.get("phone") as string) ?? "").trim() || null;
+  const cpf         = stripDigits((formData.get("cpf") as string) ?? "");
+  const phoneRaw    = stripDigits((formData.get("phone") as string) ?? "");
+  const phone       = phoneRaw.length > 0 ? phoneRaw : null;
+  const planType    = ((formData.get("plan_type") as string) ?? "basic").trim() as PlanType;
+  const homeGymId   = ((formData.get("home_gym_id") as string) ?? "").trim() || auth.gymId;
   const birthDate   = (formData.get("birth_date") as string) || null;
   const weightRaw   = ((formData.get("weight") as string) ?? "").replace(",", ".");
   const heightRaw   = ((formData.get("height") as string) ?? "").replace(",", ".");
@@ -147,8 +273,14 @@ export async function registerStudent(
   if (!firstName)     return { status: "error", message: "Nome é obrigatório." };
   if (!lastName)      return { status: "error", message: "Sobrenome é obrigatório." };
   if (!email)         return { status: "error", message: "E-mail é obrigatório." };
-  if (cpf.length !== 11) {
+  if (cpf.length !== 11 || !isValidCPF(cpf)) {
     return { status: "error", message: "CPF inválido. Informe os 11 dígitos (sem pontos ou traços)." };
+  }
+  if (!PLAN_TYPES.includes(planType)) {
+    return { status: "error", message: "Plano selecionado é inválido." };
+  }
+  if (!homeGymId) {
+    return { status: "error", message: "Selecione uma filial para o aluno." };
   }
   if (!tempPassword || tempPassword.length < 8) {
     return { status: "error", message: "A senha provisória deve ter ao menos 8 caracteres." };
@@ -208,7 +340,8 @@ export async function registerStudent(
       cpf,
       phone,
       photo_url:   photoUrl,
-      home_gym_id: auth.gymId,
+      home_gym_id: homeGymId,
+      plan_type:   planType,
       status:      "active",
       updated_at:  new Date().toISOString(),
     })

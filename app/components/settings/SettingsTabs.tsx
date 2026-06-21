@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { BuildingOffice2Icon, VideoCameraIcon } from "@heroicons/react/24/outline";
+import {
+  BuildingOffice2Icon,
+  VideoCameraIcon,
+  ClipboardDocumentListIcon,
+} from "@heroicons/react/24/outline";
 
 const TABS = [
-  { key: "gyms",      label: "Filiais",               icon: BuildingOffice2Icon },
+  { key: "gyms", label: "Filiais", icon: BuildingOffice2Icon },
   { key: "exercises", label: "Biblioteca de Exercícios", icon: VideoCameraIcon },
+  { key: "collections", label: "Coleções de Treino", icon: ClipboardDocumentListIcon },
 ] as const;
-
-type TabKey = (typeof TABS)[number]["key"];
 
 export function SettingsTabs({ activeTab }: { activeTab: string }) {
   return (
-    <div className="flex gap-1 p-1 bg-surface-1 border border-white/5 rounded-2xl w-fit">
+    <div className="flex gap-1 p-1 bg-surface-1 border border-white/5 rounded-2xl w-fit flex-wrap">
       {TABS.map(({ key, label, icon: Icon }) => {
         const isActive = activeTab === key;
         return (

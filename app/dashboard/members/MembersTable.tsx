@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   MagnifyingGlassIcon,
@@ -54,7 +54,15 @@ const PLAN_LABELS: Record<string, string> = {
 
 // ── Row Action Dropdown ───────────────────────────────────────────────────────
 
-function ActionDropdown({ member }: { member: MemberRow }) {
+// ── Row Action Dropdown ───────────────────────────────────────────────────────
+
+function ActionDropdown({
+  member,
+  onStatusChange,
+}: {
+  member: MemberRow;
+  onStatusChange: (status: string) => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -63,8 +71,19 @@ function ActionDropdown({ member }: { member: MemberRow }) {
 
   function handleBanToggle() {
     setOpen(false);
+    const next = isBanned ? "active" : "banned";
+    if (next === "banned") {
+      const ok = window.confirm("Banir este aluno? Ele perderá acesso à plataforma e à catraca.");
+      if (!ok) return;
+    }
+    onStatusChange(next);
     startTransition(async () => {
-      await updateMemberStatus(member.id, isBanned ? "active" : "banned");
+      const res = await updateMemberStatus(
+        member.id,
+        next as "active" | "inactive" | "banned",
+        member.status
+      );
+      if (!res.ok) onStatusChange(member.status);
     });
   }
 
@@ -105,10 +124,76 @@ function ActionDropdown({ member }: { member: MemberRow }) {
   );
 }
 
+// ── Table row (optimistic status) ─────────────────────────────────────────────
+
+function MemberTableRow({ member }: { member: MemberRow }) {
+  const router = useRouter();
+  const [status, setStatus] = useState(member.status);
+
+  useEffect(() => {
+    setStatus(member.status);
+  }, [member.status]);
+
+  return (
+    <tr
+      onClick={() => router.push(`/dashboard/members/${member.id}`)}
+      className="hover:bg-surface-2/50 transition-colors group cursor-pointer"
+    >
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-3">
+          {member.photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={member.photo_url}
+              alt={member.full_name}
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0 text-xs font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
+              {(member.full_name ?? "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <p className="font-medium text-white leading-tight">{member.full_name || "—"}</p>
+            {member.phone && (
+              <p className="text-xs text-zinc-600 mt-0.5">{member.phone}</p>
+            )}
+          </div>
+        </div>
+      </td>
+
+      <td className="px-4 py-4 hidden sm:table-cell">
+        <span className="text-zinc-300">
+          {PLAN_LABELS[member.plan_type] ?? member.plan_type}
+        </span>
+      </td>
+
+      <td className="px-4 py-4">
+        <span
+          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+            STATUS_STYLES[status] ?? STATUS_STYLES.inactive
+          }`}
+        >
+          {STATUS_LABELS[status] ?? status}
+        </span>
+      </td>
+
+      <td className="px-4 py-4 text-right hidden md:table-cell">
+        <span className="text-zinc-400 tabular-nums">
+          {member.experience_points.toLocaleString("pt-BR")}
+        </span>
+      </td>
+
+      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+        <ActionDropdown member={{ ...member, status }} onStatusChange={setStatus} />
+      </td>
+    </tr>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function MembersTable({ members }: Props) {
-  const router = useRouter();
   const [search, setSearch] = useState("");
 
   const query = search.trim().toLowerCase();
@@ -167,70 +252,7 @@ export function MembersTable({ members }: Props) {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filtered.map((member) => (
-                  <tr
-                    key={member.id}
-                    onClick={() => router.push(`/dashboard/members/${member.id}`)}
-                    className="hover:bg-surface-2/50 transition-colors group cursor-pointer"
-                  >
-                    {/* Aluno */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {member.photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={member.photo_url}
-                            alt={member.full_name}
-                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0 text-xs font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
-                            {(member.full_name ?? "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-white leading-tight">
-                            {member.full_name || "—"}
-                          </p>
-                          {member.phone && (
-                            <p className="text-xs text-zinc-600 mt-0.5">{member.phone}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Plano */}
-                    <td className="px-4 py-4 hidden sm:table-cell">
-                      <span className="text-zinc-300">
-                        {PLAN_LABELS[member.plan_type] ?? member.plan_type}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          STATUS_STYLES[member.status] ?? STATUS_STYLES.inactive
-                        }`}
-                      >
-                        {STATUS_LABELS[member.status] ?? member.status}
-                      </span>
-                    </td>
-
-                    {/* XP */}
-                    <td className="px-4 py-4 text-right hidden md:table-cell">
-                      <span className="text-zinc-400 tabular-nums">
-                        {member.experience_points.toLocaleString("pt-BR")}
-                      </span>
-                    </td>
-
-                    {/* Ações */}
-                    <td
-                      className="px-6 py-4 text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ActionDropdown member={member} />
-                    </td>
-                  </tr>
+                  <MemberTableRow key={member.id} member={member} />
                 ))}
               </tbody>
             </table>

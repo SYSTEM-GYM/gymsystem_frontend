@@ -48,6 +48,19 @@ export default async function MembersPage() {
   }
 
   const admin = createAdminClient();
+
+  const { data: gymsData } = await admin
+    .from("gyms")
+    .select("id, name, city")
+    .eq("owner_id", user.id)
+    .order("name", { ascending: true });
+
+  const gyms = (gymsData ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    city: g.city as string | null,
+  }));
+
   const { data: members, error } = await admin
     .from("users")
     .select(
@@ -76,7 +89,7 @@ export default async function MembersPage() {
             Cadastre e gerencie os alunos da academia.
           </p>
         </div>
-        <RegisterStudentTrigger />
+        <RegisterStudentTrigger gyms={gyms} defaultGymId={adminProfile.home_gym_id} />
       </div>
 
       {/* Summary stats */}

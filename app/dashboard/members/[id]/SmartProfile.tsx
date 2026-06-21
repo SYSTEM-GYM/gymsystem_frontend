@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   UserCircleIcon,
@@ -16,13 +16,26 @@ import {
   FireIcon,
 } from "@heroicons/react/24/outline";
 import {
-  updateMedicalNotes,
+  updateHealthData,
+  updateMemberProfile,
   updateMemberStatus,
   resetMemberPassword,
   createPhysicalAssessment,
   type MemberStatus,
 } from "@/app/dashboard/members/actions";
-import type { StudentDetail, PhysicalAssessment, OccupancyLog } from "./page";
+import { MemberWorkoutPanel } from "@/app/components/members/MemberWorkoutPanel";
+import { AuditTimeline, type AuditLogEntry } from "@/app/components/members/AuditTimeline";
+import type { StudentDetail, PhysicalAssessment, OccupancyLog, GymOption } from "./page";
+import {
+  ANAMNESIS_FIELDS,
+  PLAN_OPTIONS,
+  formatCPF,
+  formatPhone,
+  parseAnamnesisData,
+  type AnamnesisData,
+  type AnamnesisKey,
+  type PlanType,
+} from "@/lib/member-utils";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,11 +65,6 @@ function formatDatetime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function formatCPF(raw: string): string {
-  const d = raw.replace(/\D/g, "");
-  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -89,12 +97,21 @@ const labelCls = "block text-xs font-semibold text-zinc-400 uppercase tracking-w
 function TabPersonal({
   student,
   gymName,
+  gyms,
 }: {
   student: StudentDetail;
   gymName: string | null;
+  gyms: GymOption[];
 }) {
   const [pending, startTransition] = useTransition();
   const [localStatus, setLocalStatus] = useState<string>(student.status);
+  const [cpf, setCpf] = useState(student.cpf ? formatCPF(student.cpf) : "");
+  const [phone, setPhone] = useState(student.phone ? formatPhone(student.phone) : "");
+  const [planType, setPlanType] = useState<PlanType>(
+    (student.plan_type as PlanType) || "basic"
+  );
+  const [homeGymId, setHomeGymId] = useState(student.home_gym_id ?? "");
+  const [fieldMsg, setFieldMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -105,10 +122,32 @@ function TabPersonal({
     { value: "banned",   label: "Banido",  activeClass: "bg-danger/10 border-danger text-danger",            hoverClass: "hover:bg-danger/10 text-danger border-danger/30" },
   ];
 
-  function handleStatusChange(status: MemberStatus) {
+  function saveProfile(patch: Parameters<typeof updateMemberProfile>[1]) {
+    setFieldMsg(null);
     startTransition(async () => {
-      const res = await updateMemberStatus(student.id, status);
-      if (res.ok) setLocalStatus(status);
+      const res = await updateMemberProfile(student.id, patch);
+      if (res.ok) {
+        setFieldMsg({ ok: true, text: "Salvo automaticamente" });
+        setTimeout(() => setFieldMsg(null), 2000);
+      } else {
+        setFieldMsg({ ok: false, text: res.error });
+      }
+    });
+  }
+
+  function handleStatusChange(status: MemberStatus) {
+    if (status === "banned" && localStatus !== "banned") {
+      const ok = window.confirm(
+        "Banir este aluno? Ele perderá acesso à plataforma e à catraca."
+      );
+      if (!ok) return;
+    }
+
+    const previous = localStatus;
+    setLocalStatus(status);
+    startTransition(async () => {
+      const res = await updateMemberStatus(student.id, status, previous);
+      if (!res.ok) setLocalStatus(previous);
     });
   }
 
@@ -123,31 +162,84 @@ function TabPersonal({
     });
   }
 
-  const infoRows: { label: string; value: string | null }[] = [
-    { label: "CPF",       value: student.cpf ? formatCPF(student.cpf) : null },
-    { label: "Telefone",  value: student.phone ?? null },
-    { label: "Plano",     value: PLAN_LABELS[student.plan_type] ?? student.plan_type },
-    { label: "Filial",    value: gymName ?? "—" },
-    { label: "Membro desde", value: formatDate(student.created_at) },
-  ];
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Info grid */}
       <div className="space-y-4">
         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
           Informações Cadastrais
         </h3>
-        <dl className="space-y-3">
-          {infoRows.map(({ label, value }) => (
-            <div key={label} className="flex items-start justify-between gap-4 py-2 border-b border-white/5 last:border-0">
-              <dt className="text-xs text-zinc-500 uppercase tracking-wide flex-shrink-0">{label}</dt>
-              <dd className="text-sm text-white text-right">{value ?? <span className="text-zinc-600">—</span>}</dd>
-            </div>
-          ))}
-        </dl>
 
-        {/* XP */}
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>CPF</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={cpf}
+              onChange={(e) => setCpf(formatCPF(e.target.value))}
+              onBlur={() => saveProfile({ cpf })}
+              placeholder="000.000.000-00"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Telefone</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(formatPhone(e.target.value))}
+              onBlur={() => saveProfile({ phone: phone || null })}
+              placeholder="(31) 99999-9999"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Plano</label>
+            <select
+              value={planType}
+              onChange={(e) => {
+                const next = e.target.value as PlanType;
+                setPlanType(next);
+                saveProfile({ plan_type: next });
+              }}
+              className={`${inputCls} cursor-pointer`}
+            >
+              {PLAN_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Filial</label>
+            <select
+              value={homeGymId}
+              onChange={(e) => {
+                setHomeGymId(e.target.value);
+                saveProfile({ home_gym_id: e.target.value || null });
+              }}
+              className={`${inputCls} cursor-pointer`}
+            >
+              <option value="">— Selecione —</option>
+              {gyms.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}{g.city ? ` — ${g.city}` : ""}
+                </option>
+              ))}
+            </select>
+            {!homeGymId && gymName && (
+              <p className="mt-1 text-xs text-zinc-600">Atual: {gymName}</p>
+            )}
+          </div>
+          <div className="flex items-start justify-between gap-4 py-2 border-t border-white/5">
+            <dt className="text-xs text-zinc-500 uppercase tracking-wide">Membro desde</dt>
+            <dd className="text-sm text-white">{formatDate(student.created_at)}</dd>
+          </div>
+        </div>
+
+        {fieldMsg && (
+          <p className={`text-xs ${fieldMsg.ok ? "text-primary" : "text-danger"}`}>{fieldMsg.text}</p>
+        )}
+
         <div className="flex items-center justify-between px-4 py-3 bg-surface-2 rounded-2xl">
           <div className="flex items-center gap-2">
             <FireIcon className="w-4 h-4 text-primary" />
@@ -159,7 +251,6 @@ function TabPersonal({
         </div>
       </div>
 
-      {/* Status + password */}
       <div className="space-y-6">
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
@@ -180,15 +271,18 @@ function TabPersonal({
               </button>
             ))}
           </div>
-          {localStatus === "banned" && (
+          {(localStatus === "banned" || localStatus === "inactive") && (
             <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/20 rounded-2xl">
               <ExclamationTriangleIcon className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-danger">Aluno banido não consegue acessar a plataforma nem a catraca.</p>
+              <p className="text-xs text-danger">
+                {localStatus === "banned"
+                  ? "Aluno banido não consegue acessar a plataforma nem a catraca."
+                  : "Aluno inativo não consegue acessar a plataforma nem a catraca."}
+              </p>
             </div>
           )}
         </div>
 
-        {/* Password reset */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
             Redefinir Senha
@@ -230,67 +324,118 @@ function TabPersonal({
 
 function TabHealth({ student }: { student: StudentDetail }) {
   const [notes, setNotes] = useState(student.medical_notes ?? "");
+  const [anamnesis, setAnamnesis] = useState<AnamnesisData>(
+    () => parseAnamnesisData(student.anamnesis_data)
+  );
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anamnesisRef = useRef(anamnesis);
+  const notesRef = useRef(notes);
 
-  function handleSave() {
-    setError(null);
-    setSaved(false);
-    startTransition(async () => {
-      const res = await updateMedicalNotes(student.id, notes);
-      if (res.ok) {
-        setSaved(true);
-        timerRef.current = setTimeout(() => setSaved(false), 2500);
-      } else {
-        setError(res.error);
-      }
+  useEffect(() => {
+    anamnesisRef.current = anamnesis;
+  }, [anamnesis]);
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  const persistHealth = useCallback(
+    (nextAnamnesis: AnamnesisData, nextNotes: string) => {
+      setError(null);
+      setSaved(false);
+      startTransition(async () => {
+        const res = await updateHealthData(student.id, {
+          anamnesis_data: nextAnamnesis,
+          medical_notes: nextNotes,
+        });
+        if (res.ok) {
+          setSaved(true);
+          if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = setTimeout(() => setSaved(false), 2500);
+        } else {
+          setError(res.error);
+        }
+      });
+    },
+    [student.id, startTransition]
+  );
+
+  const scheduleAutoSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      persistHealth(anamnesisRef.current, notesRef.current);
+    }, 600);
+  }, [persistHealth]);
+
+  function toggleAnamnesis(key: AnamnesisKey) {
+    setAnamnesis((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      anamnesisRef.current = next;
+      scheduleAutoSave();
+      return next;
     });
   }
 
-  const anamnesisFields = [
-    { label: "Doenças Cardíacas",           key: "cardiac" },
-    { label: "Diabetes",                    key: "diabetes" },
-    { label: "Hipertensão",                 key: "hypertension" },
-    { label: "Problemas Respiratórios",     key: "respiratory" },
-    { label: "Lesões Musculares / Ósseas",  key: "musculoskeletal" },
-    { label: "Cirurgias Recentes",          key: "surgery" },
-    { label: "Uso de Medicamentos",         key: "medication" },
-    { label: "Gravidez / Pós-parto",        key: "pregnancy" },
-  ];
+  function handleNotesChange(value: string) {
+    setNotes(value);
+    notesRef.current = value;
+    setSaved(false);
+    scheduleAutoSave();
+  }
+
+  function handleSave() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    persistHealth(anamnesis, notes);
+  }
 
   return (
     <div className="space-y-8">
-      {/* Anamnese checklist — visual structure (decorative, notes is the source of truth) */}
       <div>
         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-4">
           Triagem de Saúde (Anamnese)
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {anamnesisFields.map(({ label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-2xl border border-white/5"
-            >
-              <span className="w-4 h-4 rounded-full border-2 border-white/20 flex-shrink-0" />
-              <span className="text-sm text-zinc-400">{label}</span>
-            </div>
-          ))}
+          {ANAMNESIS_FIELDS.map(({ label, key }) => {
+            const checked = !!anamnesis[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleAnamnesis(key)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-colors ${
+                  checked
+                    ? "bg-primary/10 border-primary/30 text-white"
+                    : "bg-surface-2 border-white/5 text-zinc-400 hover:border-white/10"
+                }`}
+              >
+                <span
+                  className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                    checked ? "bg-primary border-primary" : "border-white/20"
+                  }`}
+                >
+                  {checked && <CheckIcon className="w-3 h-3 text-black" />}
+                </span>
+                <span className="text-sm">{label}</span>
+              </button>
+            );
+          })}
         </div>
         <p className="mt-3 text-xs text-zinc-600">
-          Use o campo de observações abaixo para registrar condições confirmadas, restrições e detalhes relevantes.
+          Marque as condições confirmadas. O salvamento é automático; use o botão abaixo se preferir salvar manualmente.
         </p>
       </div>
 
-      {/* Free-form medical notes */}
       <div className="space-y-3">
         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">
           Observações Médicas & Restrições
         </h3>
         <textarea
           value={notes}
-          onChange={(e) => { setNotes(e.target.value); setSaved(false); }}
+          onChange={(e) => handleNotesChange(e.target.value)}
+          onBlur={handleSave}
           rows={7}
           placeholder="Ex: Hérnia de disco L4-L5, evitar exercícios de impacto lombar. Uso de Losartana 50mg. Operação no joelho direito em 2023..."
           className="w-full bg-surface-2 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none font-mono leading-relaxed"
@@ -302,6 +447,9 @@ function TabHealth({ student }: { student: StudentDetail }) {
               <p className="text-xs text-primary flex items-center gap-1">
                 <CheckIcon className="w-3.5 h-3.5" /> Salvo
               </p>
+            )}
+            {pending && !saved && !error && (
+              <p className="text-xs text-zinc-500">Salvando...</p>
             )}
           </span>
           <button
@@ -562,12 +710,53 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Workouts placeholder */}
-      <div className="p-6 bg-surface-2 border border-dashed border-white/10 rounded-3xl text-center space-y-2">
-        <ClipboardDocumentListIcon className="w-8 h-8 text-zinc-700 mx-auto" />
-        <p className="text-sm font-semibold text-zinc-500">Histórico de Treinos</p>
-        <p className="text-xs text-zinc-600">Módulo de treinos em construção.</p>
+// ── Tab: Treinos ──────────────────────────────────────────────────────────────
+
+type WorkoutCollection = { id: string; name: string };
+type WorkoutSchedule = {
+  id: string;
+  schedule_type: string;
+  day_of_week: number | null;
+  session_label: string | null;
+  collection: { name: string } | null;
+};
+type ExecutionLog = {
+  id: string;
+  logged_at: string;
+  weight_kg: number | null;
+  reps_done: number | null;
+  sets_completed: number | null;
+  exercise: { title: string } | null;
+};
+
+function TabWorkout({
+  studentId,
+  collections,
+  schedules,
+  executionLogs,
+  auditLogs,
+}: {
+  studentId: string;
+  collections: WorkoutCollection[];
+  schedules: WorkoutSchedule[];
+  executionLogs: ExecutionLog[];
+  auditLogs: AuditLogEntry[];
+}) {
+  return (
+    <div className="space-y-6">
+      <MemberWorkoutPanel
+        userId={studentId}
+        collections={collections}
+        schedules={schedules}
+        executionLogs={executionLogs}
+      />
+      <div className="pt-4 border-t border-white/5">
+        <h3 className="text-sm font-bold text-white mb-3">Histórico de Auditoria</h3>
+        <AuditTimeline logs={auditLogs} />
       </div>
     </div>
   );
@@ -575,27 +764,44 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
 
 // ── Smart Profile (root) ──────────────────────────────────────────────────────
 
-type Tab = "personal" | "health" | "assessments" | "attendance";
+type Tab = "personal" | "health" | "assessments" | "attendance" | "workout";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "personal",    label: "Dados Pessoais",    icon: UserCircleIcon },
-  { id: "health",      label: "Saúde & Lesões",    icon: HeartIcon },
-  { id: "assessments", label: "Avaliação Física",  icon: ScaleIcon },
-  { id: "attendance",  label: "Frequência",         icon: CalendarDaysIcon },
+  { id: "personal", label: "Dados Pessoais", icon: UserCircleIcon },
+  { id: "health", label: "Saúde & Lesões", icon: HeartIcon },
+  { id: "assessments", label: "Avaliação Física", icon: ScaleIcon },
+  { id: "attendance", label: "Frequência", icon: CalendarDaysIcon },
+  { id: "workout", label: "Treinos", icon: ClipboardDocumentListIcon },
 ];
 
 type Props = {
   student: StudentDetail;
   gymName: string | null;
+  gyms: GymOption[];
   assessments: PhysicalAssessment[];
   logs: OccupancyLog[];
+  collections: WorkoutCollection[];
+  schedules: WorkoutSchedule[];
+  executionLogs: ExecutionLog[];
+  auditLogs: AuditLogEntry[];
   initialTab: string;
 };
 
-export function SmartProfile({ student, gymName, assessments, logs, initialTab }: Props) {
+export function SmartProfile({
+  student,
+  gymName,
+  gyms,
+  assessments,
+  logs,
+  collections,
+  schedules,
+  executionLogs,
+  auditLogs,
+  initialTab,
+}: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>(
-    (["personal", "health", "assessments", "attendance"].includes(initialTab)
+    (["personal", "health", "assessments", "attendance", "workout"].includes(initialTab)
       ? initialTab
       : "personal") as Tab
   );
@@ -701,10 +907,19 @@ export function SmartProfile({ student, gymName, assessments, logs, initialTab }
 
       {/* ── Tab content ──────────────────────────────────────────────────────── */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl p-6">
-        {activeTab === "personal"    && <TabPersonal    student={student} gymName={gymName} />}
+        {activeTab === "personal"    && <TabPersonal    student={student} gymName={gymName} gyms={gyms} />}
         {activeTab === "health"      && <TabHealth      student={student} />}
         {activeTab === "assessments" && <TabAssessments student={student} assessments={assessments} />}
-        {activeTab === "attendance"  && <TabAttendance  logs={logs} />}
+        {activeTab === "attendance" && <TabAttendance logs={logs} />}
+        {activeTab === "workout" && (
+          <TabWorkout
+            studentId={student.id}
+            collections={collections}
+            schedules={schedules}
+            executionLogs={executionLogs}
+            auditLogs={auditLogs}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { Fragment, useActionState, useEffect, useState } from "react";
 import { PlusIcon, XMarkIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 import { createGym, type SettingsActionState } from "@/app/dashboard/settings/actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+import { GymHoursEditor, type OperatingHour } from "./GymHoursEditor";
 
 export type Gym = {
   id: string;
@@ -15,6 +17,7 @@ export type Gym = {
 
 type Props = {
   initialGyms: Gym[];
+  gymHours: Record<string, OperatingHour[]>;
 };
 
 const INITIAL_STATE: SettingsActionState = { status: "idle" };
@@ -116,7 +119,7 @@ function CreateGymModal({ onClose }: { onClose: () => void }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function GymManager({ initialGyms }: Props) {
+export function GymManager({ initialGyms, gymHours }: Props) {
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -163,20 +166,31 @@ export function GymManager({ initialGyms }: Props) {
             </thead>
             <tbody className="divide-y divide-white/5">
               {initialGyms.map((gym) => (
-                <tr key={gym.id} className="hover:bg-surface-2/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <BuildingOffice2Icon className="w-4 h-4 text-primary" />
+                <Fragment key={gym.id}>
+                  <tr className="hover:bg-surface-2/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <BuildingOffice2Icon className="w-4 h-4 text-primary" />
+                        </div>
+                        <span className="font-medium text-white">{gym.name}</span>
                       </div>
-                      <span className="font-medium text-white">{gym.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 text-zinc-400">{gym.city}</td>
-                  <td className="px-4 py-4 text-zinc-500 text-xs tabular-nums hidden sm:table-cell">
-                    {new Intl.DateTimeFormat("pt-BR").format(new Date(gym.created_at))}
-                  </td>
-                </tr>
+                    </td>
+                    <td className="px-4 py-4 text-zinc-400">{gym.city}</td>
+                    <td className="px-4 py-4 text-zinc-500 text-xs tabular-nums hidden sm:table-cell">
+                      {new Intl.DateTimeFormat("pt-BR").format(new Date(gym.created_at))}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3} className="p-0">
+                      <GymHoursEditor
+                        gymId={gym.id}
+                        gymName={gym.name}
+                        initialHours={gymHours[gym.id] ?? []}
+                      />
+                    </td>
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

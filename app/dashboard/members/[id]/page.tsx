@@ -4,8 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { SmartProfile } from "./SmartProfile";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import type { AuditLogEntry } from "@/app/components/members/AuditTimeline";
 
 export type PhysicalAssessment = {
   id: string;
@@ -39,11 +38,12 @@ export type StudentDetail = {
   status: string;
   experience_points: number;
   medical_notes: string | null;
+  anamnesis_data: Record<string, boolean> | null;
   home_gym_id: string | null;
   created_at: string;
 };
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+export type GymOption = { id: string; name: string; city: string | null };
 
 export default async function MemberProfilePage({
   params,
@@ -55,7 +55,6 @@ export default async function MemberProfilePage({
   const { id } = await params;
   const { tab = "personal" } = await searchParams;
 
-  // Auth guard
   const authClient = await createClient();
   const {
     data: { user },
@@ -69,12 +68,11 @@ export default async function MemberProfilePage({
     .single();
   if (!adminProfile || adminProfile.role !== "admin") redirect("/dashboard");
 
-  // Fetch student
   const admin = createAdminClient();
   const { data: student, error } = await admin
     .from("users")
     .select(
-      "id, full_name, first_name, last_name, photo_url, birth_date, cpf, phone, weight, height, plan_type, status, experience_points, medical_notes, home_gym_id, created_at"
+      "id, full_name, first_name, last_name, photo_url, birth_date, cpf, phone, weight, height, plan_type, status, experience_points, medical_notes, anamnesis_data, home_gym_id, created_at",
     )
     .eq("id", id)
     .single<StudentDetail>();
@@ -84,7 +82,6 @@ export default async function MemberProfilePage({
     notFound();
   }
 
-  // Fetch gym name if the student has one assigned
   let gymName: string | null = null;
   if (student.home_gym_id) {
     const { data: gym } = await admin
@@ -95,7 +92,17 @@ export default async function MemberProfilePage({
     gymName = gym?.name ?? null;
   }
 
-  // Fetch physical assessments (most recent first)
+  const { data: gymsData } = await admin
+    .from("gyms")
+    .select("id, name, city")
+    .eq("owner_id", user.id)
+    .order("name", { ascending: true });
+  const gyms: GymOption[] = (gymsData ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    city: g.city,
+  }));
+
   const { data: assessments } = await admin
     .from("physical_assessments")
     .select("id, date, weight, height, body_fat_percentage, lean_mass, notes, created_at")
@@ -103,7 +110,6 @@ export default async function MemberProfilePage({
     .order("date", { ascending: false })
     .returns<PhysicalAssessment[]>();
 
-  // Fetch last 60 occupancy logs
   const { data: logs } = await admin
     .from("occupancy_logs")
     .select("id, entered_at, exited_at")
@@ -112,9 +118,65 @@ export default async function MemberProfilePage({
     .limit(60)
     .returns<OccupancyLog[]>();
 
+  const { data: collections } = await admin
+    .from("exercise_collections")
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  const { data: schedulesRaw } = await admin
+    .from("workout_schedules")
+    .select("id, schedule_type, day_of_week, session_label, collection:exercise_collections(name)")
+    .eq("user_id", id)
+    .order("sort_order", { ascending: true });
+
+  const schedules = (schedulesRaw ?? []).map((s) => ({
+    ...s,
+    collection: Array.isArray(s.collection) ? s.collection[0] ?? null : s.collection,
+  }));
+
+  const { data: executionLogsRaw } = await admin
+    .from("workout_execution_logs")
+    .select("id, logged_at, weight_kg, reps_done, sets_completed, exercise:exercises(title)")
+    .eq("user_id", id)
+    .order("logged_at", { ascending: false })
+    .limit(30);
+
+  const executionLogs = (executionLogsRaw ?? []).map((log) => ({
+    ...log,
+    exercise: Array.isArray(log.exercise) ? log.exercise[0] ?? null : log.exercise,
+  }));
+
+  const { data: auditRaw } = await admin
+    .from("audit_logs")
+    .select("id, action, resource_type, metadata, created_at, actor_id")
+    .eq("resource_id", id)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  const actorIds = [...new Set((auditRaw ?? []).map((a) => a.actor_id).filter(Boolean))];
+  const actorMap = new Map<string, { full_name: string | null; first_name: string | null }>();
+
+  if (actorIds.length > 0) {
+    const { data: actors } = await admin
+      .from("users")
+      .select("id, full_name, first_name")
+      .in("id", actorIds as string[]);
+    for (const a of actors ?? []) {
+      actorMap.set(a.id, { full_name: a.full_name, first_name: a.first_name });
+    }
+  }
+
+  const auditLogs: AuditLogEntry[] = (auditRaw ?? []).map((a) => ({
+    id: a.id,
+    action: a.action,
+    resource_type: a.resource_type,
+    metadata: (a.metadata as Record<string, unknown>) ?? {},
+    created_at: a.created_at,
+    actor: a.actor_id ? actorMap.get(a.actor_id) ?? null : null,
+  }));
+
   return (
     <div className="space-y-6">
-      {/* Back */}
       <Link
         href="/dashboard/members"
         className="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-white transition-colors"
@@ -126,8 +188,13 @@ export default async function MemberProfilePage({
       <SmartProfile
         student={student}
         gymName={gymName}
+        gyms={gyms}
         assessments={assessments ?? []}
         logs={logs ?? []}
+        collections={collections ?? []}
+        schedules={schedules}
+        executionLogs={executionLogs}
+        auditLogs={auditLogs}
         initialTab={tab}
       />
     </div>
