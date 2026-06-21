@@ -6,20 +6,29 @@ import {
   HomeIcon,
   UserCircleIcon,
   QrCodeIcon,
+  UsersIcon,
 } from "@heroicons/react/24/outline";
 import {
   HomeIcon as HomeIconSolid,
   UserCircleIcon as UserCircleIconSolid,
   QrCodeIcon as QrCodeIconSolid,
+  UsersIcon as UsersIconSolid,
 } from "@heroicons/react/24/solid";
 
 const NAV_ITEMS = [
   {
     href:        "/app",
-    label:       "Meu Treino",
+    label:       "Treino",
     icon:        HomeIcon,
     iconActive:  HomeIconSolid,
     exact:       true,
+  },
+  {
+    href:        "/app/gymconnect",
+    label:       "Squads",
+    icon:        UsersIcon,
+    iconActive:  UsersIconSolid,
+    exact:       false,
   },
   {
     href:        "/app/access",
@@ -30,7 +39,7 @@ const NAV_ITEMS = [
   },
   {
     href:        "/app/profile",
-    label:       "Meu Perfil",
+    label:       "Perfil",
     icon:        UserCircleIcon,
     iconActive:  UserCircleIconSolid,
     exact:       false,
