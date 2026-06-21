@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/Card";
@@ -10,6 +11,8 @@ import {
   ArrowTrendingDownIcon,
   BanknotesIcon,
   ClockIcon,
+  CreditCardIcon,
+  ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 
 type Transaction = {
@@ -386,6 +389,22 @@ export default async function FinancePage({
           </div>
         </Card>
       )}
+
+      {/* Subscription module entry point */}
+      <Link href="/dashboard/finance/subscriptions" className="block group">
+        <Card padding="md" className="border-primary/10 hover:border-primary/30 transition-colors">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <CreditCardIcon className="w-6 h-6 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">Assinaturas & Faturas</p>
+              <p className="text-xs text-zinc-500 mt-0.5">MRR, inadimplência, planos e controle de recorrência.</p>
+            </div>
+            <ArrowRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors flex-shrink-0" />
+          </div>
+        </Card>
+      </Link>
 
       {/* Recurring Expenses Manager */}
       <div data-print-hide className="recurring-manager">
