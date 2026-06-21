@@ -7,12 +7,14 @@ import {
   UserCircleIcon,
   QrCodeIcon,
   UsersIcon,
+  WalletIcon,
 } from "@heroicons/react/24/outline";
 import {
   HomeIcon as HomeIconSolid,
   UserCircleIcon as UserCircleIconSolid,
   QrCodeIcon as QrCodeIconSolid,
   UsersIcon as UsersIconSolid,
+  WalletIcon as WalletIconSolid,
 } from "@heroicons/react/24/solid";
 
 const NAV_ITEMS = [
@@ -28,6 +30,13 @@ const NAV_ITEMS = [
     label:       "Squads",
     icon:        UsersIcon,
     iconActive:  UsersIconSolid,
+    exact:       false,
+  },
+  {
+    href:        "/app/wallet",
+    label:       "Carteira",
+    icon:        WalletIcon,
+    iconActive:  WalletIconSolid,
     exact:       false,
   },
   {

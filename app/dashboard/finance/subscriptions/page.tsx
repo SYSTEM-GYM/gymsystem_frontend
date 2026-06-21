@@ -60,6 +60,12 @@ export default async function SubscriptionsPage() {
           <p className="text-sm text-zinc-500 mt-1">Planos, inadimplência e controle de recorrência.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Link
+            href="/dashboard/finance/plans"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-colors"
+          >
+            Planos & Passes
+          </Link>
           <CreatePlanButton plans={plans} />
         </div>
       </div>
