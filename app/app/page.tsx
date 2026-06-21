@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ExerciseList, type Exercise } from "@/app/components/app/ExerciseList";
+import { ExerciseList } from "@/app/components/app/ExerciseList";
+import type { Exercise } from "@/app/components/app/ExerciseVideoModal";
 import { TodayWorkout } from "@/app/components/app/TodayWorkout";
 import { resolveTodayWorkout } from "@/lib/workout-utils";
 
@@ -74,7 +75,7 @@ export default async function StudentHomePage() {
 
   const { data: exercises } = await supabase
     .from("exercises")
-    .select("id, title, description, youtube_url, webm_path")
+    .select("id, title, translated_name, description, instructions, youtube_url, webm_path, video_url")
     .order("title")
     .returns<Exercise[]>();
 

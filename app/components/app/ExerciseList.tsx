@@ -2,16 +2,10 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { PlayCircleIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { ExerciseVideoModal } from "./ExerciseVideoModal";
+import { ExerciseVideoModal, type Exercise } from "./ExerciseVideoModal";
 import { ExerciseRowSkeleton } from "@/components/ui/Skeleton";
 
-export type Exercise = {
-  id: string;
-  title: string;
-  description: string | null;
-  youtube_url: string | null;
-  webm_path: string | null;
-};
+export type { Exercise };
 
 const PAGE_SIZE = 20;
 
@@ -27,7 +21,11 @@ export function ExerciseList({ exercises }: Props) {
   const filtered = useMemo(
     () =>
       query
-        ? exercises.filter((e) => e.title.toLowerCase().includes(query))
+        ? exercises.filter(
+            (e) =>
+              e.title.toLowerCase().includes(query) ||
+              (e.translated_name ?? "").toLowerCase().includes(query),
+          )
         : exercises,
     [exercises, query],
   );
@@ -56,7 +54,7 @@ export function ExerciseList({ exercises }: Props) {
     return () => observer.disconnect();
   }, [hasMore, filtered.length]);
 
-  const hasVideo = (e: Exercise) => !!(e.youtube_url || e.webm_path);
+  const hasVideo = (e: Exercise) => !!(e.youtube_url || e.webm_path || e.video_url);
 
   return (
     <>
@@ -82,7 +80,10 @@ export function ExerciseList({ exercises }: Props) {
           {visible.map((exercise) => (
             <li
               key={exercise.id}
-              className="flex items-center gap-4 p-4 bg-surface-1 border border-white/5 rounded-2xl"
+              onClick={() => hasVideo(exercise) && setActive(exercise)}
+              className={`flex items-center gap-4 p-4 bg-surface-1 border border-white/5 rounded-2xl transition-colors ${
+                hasVideo(exercise) ? "cursor-pointer hover:border-primary/20 hover:bg-surface-1/80" : ""
+              }`}
             >
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -95,20 +96,18 @@ export function ExerciseList({ exercises }: Props) {
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white leading-tight">{exercise.title}</p>
+                <p className="text-sm font-semibold text-white leading-tight">
+                  {exercise.translated_name || exercise.title}
+                </p>
                 {exercise.description && (
                   <p className="text-xs text-zinc-500 mt-0.5 truncate">{exercise.description}</p>
                 )}
               </div>
 
               {hasVideo(exercise) && (
-                <button
-                  type="button"
-                  onClick={() => setActive(exercise)}
-                  className="flex-shrink-0 min-h-[44px] px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                >
+                <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary pointer-events-none">
                   Ver Vídeo
-                </button>
+                </span>
               )}
             </li>
           ))}

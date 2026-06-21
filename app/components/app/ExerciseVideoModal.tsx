@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 
-type Exercise = {
+export type Exercise = {
   id: string;
   title: string;
+  translated_name: string | null;
   description: string | null;
+  instructions: string | null;
   youtube_url: string | null;
   webm_path: string | null;
+  video_url: string | null;
 };
 
 type Props = {
@@ -25,6 +28,7 @@ function getYouTubeEmbedUrl(url: string): string {
 
 export function ExerciseVideoModal({ exercise, onClose }: Props) {
   const [loadVideo, setLoadVideo] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!exercise) {
@@ -51,10 +55,21 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
     document.body.style.overflow = "";
   }, [exercise]);
 
+  // Slow playback rate for WebM animations so beginners can follow the movement
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (vid && loadVideo) {
+      vid.playbackRate = 0.35;
+    }
+  }, [loadVideo]);
+
   if (!exercise) return null;
 
+  const displayTitle = exercise.translated_name || exercise.title;
   const hasYoutube = !!exercise.youtube_url;
-  const hasWebm = !!exercise.webm_path;
+  // video_url (R2) takes priority over legacy webm_path
+  const webmSrc = exercise.video_url || exercise.webm_path || null;
+  const hasWebm = !!webmSrc;
 
   return (
     <>
@@ -65,9 +80,10 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
 
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none">
         <div className="pointer-events-auto w-full sm:max-w-lg bg-surface-1 border border-white/10 rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl">
+          {/* Header */}
           <div className="flex items-start justify-between px-5 py-4 border-b border-white/5">
             <div>
-              <h3 className="text-base font-bold text-white">{exercise.title}</h3>
+              <h3 className="text-base font-bold text-white">{displayTitle}</h3>
               {exercise.description && (
                 <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{exercise.description}</p>
               )}
@@ -81,6 +97,7 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
             </button>
           </div>
 
+          {/* Video */}
           <div className="bg-black min-h-[200px]">
             {hasYoutube && loadVideo && (
               <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
@@ -89,7 +106,7 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
                   className="absolute inset-0 w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  title={exercise.title}
+                  title={displayTitle}
                   loading="lazy"
                 />
               </div>
@@ -98,12 +115,17 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
             {!hasYoutube && hasWebm && loadVideo && (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
-                src={exercise.webm_path!}
-                controls
+                ref={videoRef}
+                src={webmSrc!}
                 autoPlay
+                loop
+                muted
                 playsInline
                 preload="none"
                 className="w-full"
+                onLoadedMetadata={() => {
+                  if (videoRef.current) videoRef.current.playbackRate = 0.35;
+                }}
               />
             )}
 
@@ -119,6 +141,18 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
               </div>
             )}
           </div>
+
+          {/* Instructions */}
+          {exercise.instructions && (
+            <div className="px-5 py-4 border-t border-white/5 max-h-48 overflow-y-auto">
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+                Execução
+              </p>
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                {exercise.instructions}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </>

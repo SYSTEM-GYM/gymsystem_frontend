@@ -126,6 +126,31 @@ export async function removeExerciseFromCollection(
   return { ok: true };
 }
 
+export async function deleteCollection(
+  collectionId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, message: auth.message };
+
+  const admin = createAdminClient();
+
+  // child rows deleted by FK cascade; delete parent
+  const { error } = await admin
+    .from("exercise_collections")
+    .delete()
+    .eq("id", collectionId);
+
+  if (error) {
+    console.error("deleteCollection:", error);
+    return { ok: false, message: "Erro ao excluir coleção." };
+  }
+
+  await writeAudit(auth.userId, "delete", "exercise_collection", collectionId, {});
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/workouts");
+  return { ok: true };
+}
+
 export async function reorderCollectionExercises(
   items: { id: string; sort_order: number }[],
 ): Promise<{ ok: boolean }> {

@@ -10,9 +10,12 @@ export type CollectionExerciseRow = {
   exercise: {
     id: string;
     title: string;
+    translated_name: string | null;
     description: string | null;
+    instructions: string | null;
     youtube_url: string | null;
     webm_path: string | null;
+    video_url: string | null;
   };
 };
 
@@ -102,7 +105,7 @@ export async function resolveTodayWorkout(
     .from("collection_exercises")
     .select(
       `id, exercise_id, sort_order, default_sets, default_reps, default_weight_kg,
-       exercise:exercises(id, title, description, youtube_url, webm_path)`,
+       exercise:exercises(id, title, translated_name, description, instructions, youtube_url, webm_path, video_url)`,
     )
     .eq("collection_id", collectionId)
     .order("sort_order", { ascending: true });

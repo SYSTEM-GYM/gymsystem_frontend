@@ -15,6 +15,7 @@ import {
   addExerciseToCollection,
   removeExerciseFromCollection,
   reorderCollectionExercises,
+  deleteCollection,
 } from "@/app/dashboard/settings/workout-actions";
 import type { SettingsActionState } from "@/app/dashboard/settings/actions";
 import type { Exercise } from "./ExerciseManager";
@@ -129,16 +130,86 @@ function CreateCollectionModal({
   );
 }
 
+function DeleteCollectionModal({
+  collection,
+  onClose,
+  onDeleted,
+}: {
+  collection: Collection;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteCollection(collection.id);
+      if (result.ok) {
+        onDeleted();
+      } else {
+        setError(result.message ?? "Erro ao excluir.");
+      }
+    });
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-surface-1 border border-white/10 rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center mx-auto">
+            <TrashIcon className="w-6 h-6 text-danger" />
+          </div>
+          <div className="text-center space-y-1">
+            <h3 className="text-base font-bold text-white">Excluir Coleção</h3>
+            <p className="text-sm text-zinc-500">
+              Tem certeza que deseja excluir{" "}
+              <span className="text-white font-semibold">{collection.name}</span>?{" "}
+              Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          {error && (
+            <p className="text-sm text-danger bg-danger/10 border border-danger/20 rounded-2xl px-4 py-3 text-center">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isPending}
+              className="flex-1 py-3 rounded-full text-sm font-semibold bg-surface-2 text-zinc-400 hover:text-white border border-white/5 transition-colors disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isPending}
+              className="flex-1 py-3 rounded-full text-sm font-bold bg-danger text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {isPending ? "Excluindo..." : "Excluir"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function CollectionDetail({
   collection,
   items,
   allExercises,
   onUpdate,
+  onDeleteRequest,
 }: {
   collection: Collection;
   items: CollectionExerciseItem[];
   allExercises: Exercise[];
   onUpdate: () => void;
+  onDeleteRequest: (c: Collection) => void;
 }) {
   const [localItems, setLocalItems] = useState(items);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -208,6 +279,14 @@ function CollectionDetail({
             ~{collection.estimated_duration_minutes} min · {localItems.length} exercício(s)
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => onDeleteRequest(collection)}
+          title="Excluir coleção"
+          className="p-2 rounded-xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-colors flex-shrink-0"
+        >
+          <TrashIcon className="w-4 h-4" />
+        </button>
       </div>
 
       {localItems.length === 0 ? (
@@ -246,7 +325,9 @@ function CollectionDetail({
         >
           <option value="">Adicionar exercício...</option>
           {available.map((e) => (
-            <option key={e.id} value={e.id}>{e.title}</option>
+            <option key={e.id} value={e.id}>
+              {e.translated_name || e.title}
+            </option>
           ))}
         </select>
         <button
@@ -272,9 +353,18 @@ export function CollectionManager({
   const [selectedId, setSelectedId] = useState<string | null>(
     initialCollections[0]?.id ?? null,
   );
+  const [toDelete, setToDelete] = useState<Collection | null>(null);
   const router = useRouter();
 
   function handleUpdate() {
+    router.refresh();
+  }
+
+  function handleDeleted() {
+    setToDelete(null);
+    // select the first remaining collection
+    const remaining = initialCollections.filter((c) => c.id !== toDelete?.id);
+    setSelectedId(remaining[0]?.id ?? null);
     router.refresh();
   }
 
@@ -331,6 +421,7 @@ export function CollectionManager({
                 items={collectionExercises[selected.id] ?? []}
                 allExercises={allExercises}
                 onUpdate={handleUpdate}
+                onDeleteRequest={setToDelete}
               />
             )}
           </div>
@@ -339,6 +430,13 @@ export function CollectionManager({
 
       {showModal && (
         <CreateCollectionModal gyms={gyms} onClose={() => setShowModal(false)} />
+      )}
+      {toDelete && (
+        <DeleteCollectionModal
+          collection={toDelete}
+          onClose={() => setToDelete(null)}
+          onDeleted={handleDeleted}
+        />
       )}
     </div>
   );

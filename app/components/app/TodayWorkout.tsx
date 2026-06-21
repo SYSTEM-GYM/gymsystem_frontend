@@ -31,7 +31,7 @@ function ExerciseTracker({
   const [pending, startTransition] = useTransition();
   const [showVideo, setShowVideo] = useState(false);
 
-  const hasVideo = !!(row.exercise.youtube_url || row.exercise.webm_path);
+  const hasVideo = !!(row.exercise.youtube_url || row.exercise.webm_path || row.exercise.video_url);
 
   function handleSave() {
     const prevSaved = saved;
@@ -57,7 +57,7 @@ function ExerciseTracker({
       <li className="p-4 bg-surface-1 border border-white/5 rounded-2xl space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white">{row.exercise.title}</p>
+            <p className="text-sm font-bold text-white">{row.exercise.translated_name || row.exercise.title}</p>
             <p className="text-[10px] text-zinc-600 mt-0.5">
               Meta: {row.default_sets}×{row.default_reps}
               {lastLog?.weight_kg != null && (
