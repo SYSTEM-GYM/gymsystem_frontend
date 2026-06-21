@@ -73,7 +73,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   if (tab === "exercises" || tab === "collections") {
     const { data } = await admin
       .from("exercises")
-      .select("id, title, description, youtube_url, webm_path, created_at")
+      .select("id, title, translated_name, description, youtube_url, webm_path, video_url, created_at")
       .order("created_at", { ascending: false });
     exercises = (data ?? []) as Exercise[];
   }

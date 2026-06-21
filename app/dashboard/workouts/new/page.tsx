@@ -23,7 +23,7 @@ export default async function NewWorkoutPage() {
   const [{ data: exercises }, { data: gyms }] = await Promise.all([
     admin
       .from("exercises")
-      .select("id, title, primary_muscle, youtube_url, webm_path, video_url")
+      .select("id, title, translated_name, primary_muscle, youtube_url, webm_path, video_url")
       .order("title", { ascending: true })
       .returns<ExerciseOption[]>(),
     admin

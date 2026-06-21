@@ -9,7 +9,6 @@ import {
   FilmIcon,
   VideoCameraIcon,
   TrashIcon,
-  PencilIcon,
 } from "@heroicons/react/24/outline";
 import {
   createExercise,
@@ -22,6 +21,7 @@ import {
 export type Exercise = {
   id: string;
   title: string;
+  translated_name: string | null;
   description: string | null;
   youtube_url: string | null;
   webm_path: string | null;
@@ -279,6 +279,38 @@ function DeleteConfirmModal({
 
 // ── Exercise Card ─────────────────────────────────────────────────────────────
 
+function ExerciseVideoPreview({ exercise }: { exercise: Exercise }) {
+  if (exercise.video_url) {
+    return (
+      <video
+        src={exercise.video_url}
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="w-full h-32 object-cover rounded-xl"
+      />
+    );
+  }
+  if (exercise.youtube_url) {
+    const m =
+      exercise.youtube_url.match(/youtube\.com\/watch\?v=([^&]+)/) ??
+      exercise.youtube_url.match(/youtu\.be\/([^?]+)/);
+    const ytId = m?.[1];
+    if (ytId) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`}
+          alt={exercise.title}
+          className="w-full h-32 object-cover rounded-xl"
+        />
+      );
+    }
+  }
+  return null;
+}
+
 function ExerciseCard({
   exercise,
   onDelete,
@@ -286,67 +318,78 @@ function ExerciseCard({
   exercise: Exercise;
   onDelete: (e: Exercise) => void;
 }) {
-  const hasVideo = !!(exercise.youtube_url || exercise.webm_path || exercise.video_url);
+  const hasVideo = !!(exercise.video_url || exercise.youtube_url || exercise.webm_path);
 
-  const videoLabel = exercise.youtube_url
-    ? "YouTube"
-    : exercise.video_url
+  const videoLabel = exercise.video_url
     ? "R2 WebM"
+    : exercise.youtube_url
+    ? "YouTube"
     : exercise.webm_path
     ? "Arquivo WebM"
     : null;
 
-  return (
-    <div className="bg-surface-2/50 border border-white/5 rounded-2xl p-4 flex gap-4 hover:border-white/10 transition-colors group">
-      {/* Video badge */}
-      <div
-        className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${
-          exercise.youtube_url
-            ? "bg-red-500/10"
-            : hasVideo
-            ? "bg-primary/10"
-            : "bg-zinc-800"
-        }`}
-      >
-        {exercise.youtube_url ? (
-          <PlayIcon className="w-5 h-5 text-red-400" />
-        ) : hasVideo ? (
-          <VideoCameraIcon className="w-5 h-5 text-primary" />
-        ) : (
-          <FilmIcon className="w-5 h-5 text-zinc-600" />
-        )}
-      </div>
+  const preview = <ExerciseVideoPreview exercise={exercise} />;
 
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-white text-sm truncate">{exercise.title}</p>
-        {exercise.description && (
-          <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
-            {exercise.description}
-          </p>
-        )}
-        <div className="flex items-center gap-2 mt-2">
-          {videoLabel ? (
-            <span className="text-xs text-primary font-medium">{videoLabel}</span>
-          ) : (
-            <span className="text-xs text-zinc-600">Sem vídeo</span>
-          )}
-          <span className="text-zinc-700 text-xs">·</span>
-          <span className="text-xs text-zinc-600 tabular-nums">
-            {new Intl.DateTimeFormat("pt-BR").format(new Date(exercise.created_at))}
+  return (
+    <div className="bg-surface-2/50 border border-white/5 rounded-2xl overflow-hidden hover:border-white/10 transition-colors group">
+      {/* Video preview strip */}
+      {preview && (
+        <div className="relative bg-zinc-900">
+          {preview}
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/60 text-primary backdrop-blur-sm">
+            {videoLabel}
           </span>
         </div>
-      </div>
+      )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => onDelete(exercise)}
-          title="Excluir exercício"
-          className="p-2 rounded-xl text-zinc-500 hover:bg-danger/10 hover:text-danger transition-colors"
-        >
-          <TrashIcon className="w-4 h-4" />
-        </button>
+      <div className="p-4 flex gap-3">
+        {/* Icon badge (shown only when no video preview) */}
+        {!preview && (
+          <div
+            className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${
+              hasVideo ? "bg-primary/10" : "bg-zinc-800"
+            }`}
+          >
+            {hasVideo ? (
+              <VideoCameraIcon className="w-5 h-5 text-primary" />
+            ) : (
+              <FilmIcon className="w-5 h-5 text-zinc-600" />
+            )}
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-white text-sm truncate">
+            {exercise.translated_name || exercise.title}
+          </p>
+          {exercise.description && (
+            <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
+              {exercise.description}
+            </p>
+          )}
+          <div className="flex items-center gap-2 mt-2">
+            {videoLabel && !preview ? (
+              <span className="text-xs text-primary font-medium">{videoLabel}</span>
+            ) : !hasVideo ? (
+              <span className="text-xs text-zinc-600">Sem vídeo</span>
+            ) : null}
+            <span className="text-xs text-zinc-600 tabular-nums">
+              {new Intl.DateTimeFormat("pt-BR").format(new Date(exercise.created_at))}
+            </span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => onDelete(exercise)}
+            title="Excluir exercício"
+            className="p-2 rounded-xl text-zinc-500 hover:bg-danger/10 hover:text-danger transition-colors"
+          >
+            <TrashIcon className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

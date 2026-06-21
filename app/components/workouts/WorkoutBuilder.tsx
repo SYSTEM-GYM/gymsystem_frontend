@@ -27,6 +27,7 @@ import { createWorkout } from "@/app/dashboard/workouts/actions";
 export type ExerciseOption = {
   id: string;
   title: string;
+  translated_name: string | null;
   primary_muscle: string | null;
   youtube_url: string | null;
   webm_path: string | null;
@@ -108,7 +109,11 @@ function ExerciseCombobox({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return exercises.filter(
-      (e) => !usedIds.has(e.id) && (!q || e.title.toLowerCase().includes(q)),
+      (e) =>
+        !usedIds.has(e.id) &&
+        (!q ||
+          e.title.toLowerCase().includes(q) ||
+          (e.translated_name ?? "").toLowerCase().includes(q)),
     );
   }, [exercises, usedIds, query]);
 
@@ -165,7 +170,9 @@ function ExerciseCombobox({
               >
                 <ExerciseThumbnail exercise={ex} />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{ex.title}</p>
+                  <p className="text-sm font-semibold text-white truncate">
+                    {ex.translated_name || ex.title}
+                  </p>
                   {ex.primary_muscle && (
                     <p className="text-xs text-zinc-500 capitalize">{ex.primary_muscle}</p>
                   )}
@@ -238,7 +245,9 @@ function BuilderItemRow({
       <ExerciseThumbnail exercise={item.exercise} />
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white truncate">{item.exercise.title}</p>
+        <p className="text-sm font-semibold text-white truncate">
+          {item.exercise.translated_name || item.exercise.title}
+        </p>
         {item.exercise.primary_muscle && (
           <p className="text-xs text-zinc-500 capitalize mt-0.5">{item.exercise.primary_muscle}</p>
         )}
