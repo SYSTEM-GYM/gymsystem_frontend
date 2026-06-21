@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import {
   PlusIcon,
@@ -8,8 +8,14 @@ import {
   PlayIcon,
   FilmIcon,
   VideoCameraIcon,
+  TrashIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
-import { createExercise, type SettingsActionState } from "@/app/dashboard/settings/actions";
+import {
+  createExercise,
+  deleteExercise,
+  type SettingsActionState,
+} from "@/app/dashboard/settings/actions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,6 +25,7 @@ export type Exercise = {
   description: string | null;
   youtube_url: string | null;
   webm_path: string | null;
+  video_url: string | null;
   created_at: string;
 };
 
@@ -144,11 +151,9 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
 
-              {/* Hidden field so the action knows video_type */}
               <input type="hidden" name="video_type" value={videoType} />
             </div>
 
-            {/* YouTube URL */}
             {videoType === "youtube" && (
               <div>
                 <label htmlFor="ex-youtube" className={labelClass}>
@@ -164,7 +169,6 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* WebM upload */}
             {videoType === "webm" && (
               <div>
                 <label htmlFor="ex-webm" className={labelClass}>
@@ -206,26 +210,107 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Exercise Card ─────────────────────────────────────────────────────────────
+// ── Delete Confirm Modal ──────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise }: { exercise: Exercise }) {
-  const hasVideo = !!(exercise.youtube_url || exercise.webm_path);
+function DeleteConfirmModal({
+  exercise,
+  onClose,
+}: {
+  exercise: Exercise;
+  onClose: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteExercise(exercise.id);
+      if (result.status === "error") {
+        setError(result.message);
+      } else {
+        onClose();
+      }
+    });
+  }
 
   return (
-    <div className="bg-surface-2/50 border border-white/5 rounded-2xl p-4 flex gap-4 hover:border-white/10 transition-colors">
+    <>
+      <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-surface-1 border border-white/10 rounded-3xl shadow-2xl p-6 space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center mx-auto">
+            <TrashIcon className="w-6 h-6 text-danger" />
+          </div>
+          <div className="text-center space-y-1">
+            <h3 className="text-base font-bold text-white">Excluir Exercício</h3>
+            <p className="text-sm text-zinc-500">
+              Tem certeza que deseja excluir{" "}
+              <span className="text-white font-semibold">{exercise.title}</span>? Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          {error && (
+            <p className="text-sm text-danger bg-danger/10 border border-danger/20 rounded-2xl px-4 py-3 text-center">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isPending}
+              className="flex-1 py-3 rounded-full text-sm font-semibold bg-surface-2 text-zinc-400 hover:text-white border border-white/5 transition-colors disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isPending}
+              className="flex-1 py-3 rounded-full text-sm font-bold bg-danger text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {isPending ? "Excluindo..." : "Excluir"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Exercise Card ─────────────────────────────────────────────────────────────
+
+function ExerciseCard({
+  exercise,
+  onDelete,
+}: {
+  exercise: Exercise;
+  onDelete: (e: Exercise) => void;
+}) {
+  const hasVideo = !!(exercise.youtube_url || exercise.webm_path || exercise.video_url);
+
+  const videoLabel = exercise.youtube_url
+    ? "YouTube"
+    : exercise.video_url
+    ? "R2 WebM"
+    : exercise.webm_path
+    ? "Arquivo WebM"
+    : null;
+
+  return (
+    <div className="bg-surface-2/50 border border-white/5 rounded-2xl p-4 flex gap-4 hover:border-white/10 transition-colors group">
       {/* Video badge */}
       <div
         className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${
           exercise.youtube_url
             ? "bg-red-500/10"
-            : exercise.webm_path
+            : hasVideo
             ? "bg-primary/10"
             : "bg-zinc-800"
         }`}
       >
         {exercise.youtube_url ? (
           <PlayIcon className="w-5 h-5 text-red-400" />
-        ) : exercise.webm_path ? (
+        ) : hasVideo ? (
           <VideoCameraIcon className="w-5 h-5 text-primary" />
         ) : (
           <FilmIcon className="w-5 h-5 text-zinc-600" />
@@ -240,10 +325,8 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
           </p>
         )}
         <div className="flex items-center gap-2 mt-2">
-          {hasVideo ? (
-            <span className="text-xs text-primary font-medium">
-              {exercise.youtube_url ? "YouTube" : "Arquivo WebM"}
-            </span>
+          {videoLabel ? (
+            <span className="text-xs text-primary font-medium">{videoLabel}</span>
           ) : (
             <span className="text-xs text-zinc-600">Sem vídeo</span>
           )}
@@ -253,6 +336,18 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
           </span>
         </div>
       </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => onDelete(exercise)}
+          title="Excluir exercício"
+          className="p-2 rounded-xl text-zinc-500 hover:bg-danger/10 hover:text-danger transition-colors"
+        >
+          <TrashIcon className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -261,6 +356,7 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
 
 export function ExerciseManager({ initialExercises }: Props) {
   const [showModal, setShowModal] = useState(false);
+  const [toDelete, setToDelete] = useState<Exercise | null>(null);
 
   return (
     <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
@@ -291,7 +387,11 @@ export function ExerciseManager({ initialExercises }: Props) {
       ) : (
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {initialExercises.map((exercise) => (
-            <ExerciseCard key={exercise.id} exercise={exercise} />
+            <ExerciseCard
+              key={exercise.id}
+              exercise={exercise}
+              onDelete={setToDelete}
+            />
           ))}
         </div>
       )}
@@ -303,6 +403,9 @@ export function ExerciseManager({ initialExercises }: Props) {
       </div>
 
       {showModal && <CreateExerciseModal onClose={() => setShowModal(false)} />}
+      {toDelete && (
+        <DeleteConfirmModal exercise={toDelete} onClose={() => setToDelete(null)} />
+      )}
     </div>
   );
 }

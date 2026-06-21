@@ -174,3 +174,33 @@ export async function createExercise(
   revalidatePath("/dashboard/settings");
   return { status: "success" };
 }
+
+export async function deleteExercise(id: string): Promise<SettingsActionState> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { status: "error", message: auth.message };
+
+  const admin = createAdminClient();
+
+  const { data: exercise } = await admin
+    .from("exercises")
+    .select("webm_path")
+    .eq("id", id)
+    .single();
+
+  const { error } = await admin.from("exercises").delete().eq("id", id);
+
+  if (error) {
+    console.error("deleteExercise db error:", error);
+    return { status: "error", message: "Erro ao excluir exercício." };
+  }
+
+  if (exercise?.webm_path) {
+    const filename = exercise.webm_path.split("/").pop();
+    if (filename) {
+      await admin.storage.from(EXERCISE_VIDEOS_BUCKET).remove([filename]);
+    }
+  }
+
+  revalidatePath("/dashboard/settings");
+  return { status: "success" };
+}
