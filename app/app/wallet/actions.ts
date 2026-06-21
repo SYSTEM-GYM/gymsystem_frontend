@@ -25,12 +25,6 @@ export type WalletData = {
   hasAccess: boolean;
 };
 
-const BILLING_CYCLE_LABELS: Record<string, string> = {
-  monthly: "Mensal",
-  quarterly: "Trimestral",
-  yearly: "Anual",
-};
-
 export async function getStudentWalletData(): Promise<WalletData> {
   const supabase = await createClient();
 
@@ -103,6 +97,3 @@ export async function getStudentWalletData(): Promise<WalletData> {
   };
 }
 
-export function billingCycleLabel(cycle: string): string {
-  return BILLING_CYCLE_LABELS[cycle] ?? cycle;
-}
