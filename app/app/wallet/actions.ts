@@ -1,6 +1,27 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export type { CouponValidation, StudentCheckoutResult, StudentCheckoutInput } from "@/app/dashboard/finance/plans/actions";
+export { validateCoupon, processStudentCheckout } from "@/app/dashboard/finance/plans/actions";
+
+export type PlanOption = {
+  id: string;
+  name: string;
+  price: number;
+  billing_cycle: "monthly" | "quarterly" | "yearly";
+};
+
+export async function getPlansForCheckout(): Promise<PlanOption[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("gym_plans")
+    .select("id, name, price, billing_cycle")
+    .eq("active", true)
+    .order("price", { ascending: true });
+  return (data ?? []) as PlanOption[];
+}
 
 export type StudentSubscription = {
   id: string;

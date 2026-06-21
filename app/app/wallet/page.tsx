@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getStudentWalletData } from "./actions";
+import { getStudentWalletData, getPlansForCheckout } from "./actions";
 import { WalletClient } from "./WalletClient";
 
 export const revalidate = 0;
@@ -12,7 +12,10 @@ export default async function WalletPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const wallet = await getStudentWalletData();
+  const [wallet, plans] = await Promise.all([
+    getStudentWalletData(),
+    getPlansForCheckout(),
+  ]);
 
-  return <WalletClient wallet={wallet} />;
+  return <WalletClient wallet={wallet} plans={plans} />;
 }
