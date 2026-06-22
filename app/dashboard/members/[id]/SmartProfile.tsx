@@ -14,6 +14,9 @@ import {
   ExclamationTriangleIcon,
   BeakerIcon,
   FireIcon,
+  FilmIcon,
+  XMarkIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
   updateHealthData,
@@ -21,7 +24,10 @@ import {
   updateMemberStatus,
   resetMemberPassword,
   createPhysicalAssessment,
+  searchExercises,
+  saveCustomWorkoutSheet,
   type MemberStatus,
+  type ExerciseSearchResult,
 } from "@/app/dashboard/members/actions";
 import { MemberWorkoutPanel } from "@/app/components/members/MemberWorkoutPanel";
 import { AuditTimeline, type AuditLogEntry } from "@/app/components/members/AuditTimeline";
@@ -698,6 +704,441 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
   );
 }
 
+// ── Custom Workout Editor ─────────────────────────────────────────────────────
+
+const SESSION_LABELS = ["A", "B", "C", "D", "E", "F"] as const;
+
+function genId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function extractYtId(url: string | null): string | null {
+  if (!url) return null;
+  const m = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m?.[1] ?? null;
+}
+
+type SheetRow = {
+  uid: string;
+  exercise_id: string;
+  exercise_title: string;
+  youtube_url: string | null;
+  sets: string;
+  reps: string;
+  weight: string;
+  rest: string;
+  notes: string;
+};
+
+type CustomSession = {
+  label: string;
+  rows: SheetRow[];
+};
+
+function ExerciseSearchPopover({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (ex: ExerciseSearchResult) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ExerciseSearchResult[]>([]);
+  const [searching, startSearch] = useTransition();
+
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      startSearch(async () => {
+        const res = await searchExercises(query);
+        if (res.ok) setResults(res.exercises);
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 mb-1">
+        <input
+          autoFocus
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar exercício pelo nome..."
+          className="flex-1 bg-surface-1 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/40 transition-colors"
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 text-zinc-500 hover:text-white transition-colors flex-shrink-0"
+        >
+          <XMarkIcon className="w-4 h-4" />
+        </button>
+      </div>
+
+      {results.length > 0 && (
+        <div className="absolute z-20 left-0 right-0 bg-surface-1 border border-white/10 rounded-2xl overflow-hidden shadow-2xl max-h-64 overflow-y-auto">
+          {results.map((ex) => {
+            const ytId = extractYtId(ex.youtube_url);
+            return (
+              <button
+                key={ex.id}
+                type="button"
+                onClick={() => { onSelect(ex); onClose(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0"
+              >
+                {ytId ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
+                    alt={ex.title}
+                    className="w-10 h-10 object-cover rounded-lg flex-shrink-0 bg-zinc-800"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-surface-2 flex items-center justify-center flex-shrink-0">
+                    <FilmIcon className="w-4 h-4 text-zinc-600" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">
+                    {ex.translated_name || ex.title}
+                  </p>
+                  {ex.translated_name && (
+                    <p className="text-xs text-zinc-600 truncate">{ex.title}</p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {searching && query.length >= 2 && (
+        <p className="text-xs text-zinc-600 px-1 py-2">Buscando...</p>
+      )}
+      {!searching && query.length >= 2 && results.length === 0 && (
+        <p className="text-xs text-zinc-600 px-1 py-2">Nenhum exercício encontrado para &ldquo;{query}&rdquo;.</p>
+      )}
+    </div>
+  );
+}
+
+function CustomWorkoutEditor({
+  studentId,
+  studentName,
+}: {
+  studentId: string;
+  studentName: string;
+}) {
+  const [sessions, setSessions] = useState<CustomSession[]>([
+    { label: "A", rows: [] },
+  ]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [saving, startSave] = useTransition();
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const activeSession = sessions[activeIdx];
+
+  const cellInput =
+    "w-full bg-transparent border-0 text-sm text-white text-center tabular-nums focus:outline-none focus:bg-primary/5 focus:ring-1 focus:ring-primary/20 rounded-lg px-1 py-1.5 transition-colors min-h-[36px]";
+
+  function addSession() {
+    if (sessions.length >= SESSION_LABELS.length) return;
+    const nextLabel = SESSION_LABELS[sessions.length];
+    setSessions((prev) => [...prev, { label: nextLabel, rows: [] }]);
+    setActiveIdx(sessions.length);
+  }
+
+  function removeSession(idx: number) {
+    if (sessions.length === 1) return;
+    setSessions((prev) => prev.filter((_, i) => i !== idx));
+    setActiveIdx((prev) => Math.min(prev, sessions.length - 2));
+  }
+
+  function updateRow(rowUid: string, patch: Partial<SheetRow>) {
+    setSessions((prev) =>
+      prev.map((s, i) =>
+        i !== activeIdx
+          ? s
+          : { ...s, rows: s.rows.map((r) => (r.uid === rowUid ? { ...r, ...patch } : r)) },
+      ),
+    );
+  }
+
+  function removeRow(rowUid: string) {
+    setSessions((prev) =>
+      prev.map((s, i) =>
+        i !== activeIdx ? s : { ...s, rows: s.rows.filter((r) => r.uid !== rowUid) },
+      ),
+    );
+  }
+
+  function addExercise(ex: ExerciseSearchResult) {
+    const newRow: SheetRow = {
+      uid: genId(),
+      exercise_id: ex.id,
+      exercise_title: ex.translated_name || ex.title,
+      youtube_url: ex.youtube_url,
+      sets: "3",
+      reps: "12",
+      weight: "",
+      rest: "60",
+      notes: "",
+    };
+    setSessions((prev) =>
+      prev.map((s, i) =>
+        i !== activeIdx ? s : { ...s, rows: [...s.rows, newRow] },
+      ),
+    );
+  }
+
+  function handleSave() {
+    setSaveMsg(null);
+    startSave(async () => {
+      const payload = sessions
+        .filter((s) => s.rows.length > 0)
+        .map((s) => ({
+          label: s.label,
+          exercises: s.rows
+            .filter((r) => r.exercise_id)
+            .map((r) => ({
+              exercise_id: r.exercise_id,
+              sets: Math.max(1, parseInt(r.sets) || 3),
+              reps: Math.max(1, parseInt(r.reps) || 12),
+              weight_kg: r.weight ? parseFloat(r.weight) : null,
+              rest_seconds: Math.max(0, parseInt(r.rest) || 60),
+              notes: r.notes.trim() || null,
+            })),
+        }));
+      const res = await saveCustomWorkoutSheet(studentId, studentName, payload);
+      setSaveMsg(
+        res.ok
+          ? { ok: true, text: "Ficha salva e atribuída ao aluno com sucesso!" }
+          : { ok: false, text: res.error },
+      );
+    });
+  }
+
+  return (
+    <div className="space-y-4 border-b border-white/5 pb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-white">Editor de Ficha Personalizada</h3>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Monte a ficha A/B/C e clique em &ldquo;Salvar&rdquo; para criar e atribuir ao aluno.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0"
+        >
+          <CheckIcon className="w-3.5 h-3.5" />
+          {saving ? "Salvando..." : "Salvar Ficha no Perfil"}
+        </button>
+      </div>
+
+      {saveMsg && (
+        <p className={`text-xs font-medium ${saveMsg.ok ? "text-primary" : "text-danger"}`}>
+          {saveMsg.text}
+        </p>
+      )}
+
+      {/* Session tabs */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {sessions.map((s, i) => (
+          <div key={s.label} className="relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                activeIdx === i
+                  ? "bg-primary text-black border-primary"
+                  : "bg-surface-2 text-zinc-400 border-white/10 hover:text-white hover:border-white/20"
+              } ${sessions.length > 1 ? "pr-7" : ""}`}
+            >
+              Sessão {s.label}
+              <span
+                className={`ml-1.5 text-[10px] ${
+                  activeIdx === i ? "text-black/50" : "text-zinc-600"
+                }`}
+              >
+                {s.rows.length}
+              </span>
+            </button>
+            {sessions.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeSession(i)}
+                title="Remover sessão"
+                className={`absolute right-1.5 p-0.5 rounded transition-colors ${
+                  activeIdx === i
+                    ? "text-black/40 hover:text-black/70"
+                    : "text-zinc-700 hover:text-danger"
+                }`}
+              >
+                <XMarkIcon className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        ))}
+        {sessions.length < SESSION_LABELS.length && (
+          <button
+            type="button"
+            onClick={addSession}
+            className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-500 border border-dashed border-white/15 hover:text-white hover:border-white/30 transition-colors"
+          >
+            <PlusIcon className="w-3.5 h-3.5" />
+            Sessão
+          </button>
+        )}
+      </div>
+
+      {/* Spreadsheet */}
+      <div className="bg-surface-2/40 border border-white/8 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/8 bg-surface-2/60">
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider w-8">#</th>
+                <th className="text-left px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider min-w-[200px]">Exercício</th>
+                <th className="px-2 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider w-16 text-center">Séries</th>
+                <th className="px-2 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider w-16 text-center">Reps</th>
+                <th className="px-2 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider w-24 text-center">Carga (kg)</th>
+                <th className="px-2 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider w-24 text-center">Descanso (s)</th>
+                <th className="text-left px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider min-w-[140px]">Observações</th>
+                <th className="w-10" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {activeSession.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-xs text-zinc-600">
+                    Nenhum exercício nesta sessão. Clique em &ldquo;+ Adicionar Exercício&rdquo; abaixo.
+                  </td>
+                </tr>
+              ) : (
+                activeSession.rows.map((row, idx) => {
+                  const ytId = extractYtId(row.youtube_url);
+                  return (
+                    <tr key={row.uid} className="hover:bg-white/[0.03] transition-colors group">
+                      <td className="px-4 py-1.5 text-xs text-zinc-600 tabular-nums">{idx + 1}</td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                          {ytId ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
+                              alt={row.exercise_title}
+                              className="w-8 h-8 object-cover rounded-lg flex-shrink-0 bg-zinc-800"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-surface-1 flex items-center justify-center flex-shrink-0">
+                              <FilmIcon className="w-3.5 h-3.5 text-zinc-700" />
+                            </div>
+                          )}
+                          <span className="text-sm text-white truncate max-w-[160px]">
+                            {row.exercise_title}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          type="number"
+                          value={row.sets}
+                          onChange={(e) => updateRow(row.uid, { sets: e.target.value })}
+                          className={cellInput}
+                          min="1"
+                          max="20"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          type="number"
+                          value={row.reps}
+                          onChange={(e) => updateRow(row.uid, { reps: e.target.value })}
+                          className={cellInput}
+                          min="1"
+                          max="100"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          type="number"
+                          value={row.weight}
+                          onChange={(e) => updateRow(row.uid, { weight: e.target.value })}
+                          placeholder="—"
+                          className={`${cellInput} placeholder-zinc-700`}
+                          min="0"
+                          step="0.5"
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          type="number"
+                          value={row.rest}
+                          onChange={(e) => updateRow(row.uid, { rest: e.target.value })}
+                          className={cellInput}
+                          min="0"
+                          step="5"
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="text"
+                          value={row.notes}
+                          onChange={(e) => updateRow(row.uid, { notes: e.target.value })}
+                          placeholder="..."
+                          className={`${cellInput} text-left text-zinc-400 placeholder-zinc-700`}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.uid)}
+                          className="p-1.5 rounded-lg text-zinc-700 hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Add exercise */}
+        <div className="border-t border-white/8 p-3">
+          {showSearch ? (
+            <ExerciseSearchPopover
+              onSelect={(ex) => {
+                addExercise(ex);
+                setShowSearch(false);
+              }}
+              onClose={() => setShowSearch(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowSearch(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 border border-dashed border-white/10 hover:text-white hover:border-white/25 transition-colors"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+              Adicionar Exercício
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Treinos ──────────────────────────────────────────────────────────────
 
 type WorkoutCollectionExercise = {
@@ -732,12 +1173,14 @@ type ExecutionLog = {
 
 function TabWorkout({
   studentId,
+  studentName,
   collections,
   schedules,
   executionLogs,
   auditLogs,
 }: {
   studentId: string;
+  studentName: string;
   collections: WorkoutCollection[];
   schedules: WorkoutSchedule[];
   executionLogs: ExecutionLog[];
@@ -745,6 +1188,7 @@ function TabWorkout({
 }) {
   return (
     <div className="space-y-6">
+      <CustomWorkoutEditor studentId={studentId} studentName={studentName} />
       <MemberWorkoutPanel
         userId={studentId}
         collections={collections}
@@ -911,6 +1355,7 @@ export function SmartProfile({
         {activeTab === "workout" && (
           <TabWorkout
             studentId={student.id}
+            studentName={student.full_name}
             collections={collections}
             schedules={schedules}
             executionLogs={executionLogs}

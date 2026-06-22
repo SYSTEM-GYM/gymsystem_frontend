@@ -359,6 +359,117 @@ export async function registerStudent(
   return { status: "success", studentName: `${firstName} ${lastName}` };
 }
 
+// ── Search exercises ──────────────────────────────────────────────────────────
+
+export type ExerciseSearchResult = {
+  id: string;
+  title: string;
+  translated_name: string | null;
+  youtube_url: string | null;
+};
+
+export async function searchExercises(query: string): Promise<
+  | { ok: true; exercises: ExerciseSearchResult[] }
+  | { ok: false; error: string }
+> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const q = query.trim();
+  if (q.length < 2) return { ok: true, exercises: [] };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("exercises")
+    .select("id, title, translated_name, youtube_url")
+    .or(`title.ilike.%${q}%,translated_name.ilike.%${q}%`)
+    .limit(15);
+
+  if (error) {
+    console.error("searchExercises error:", error);
+    return { ok: false, error: "Erro ao buscar exercícios." };
+  }
+  return { ok: true, exercises: data ?? [] };
+}
+
+// ── Save custom workout sheet (A/B/C) ─────────────────────────────────────────
+
+type CustomSessionInput = {
+  label: string;
+  exercises: {
+    exercise_id: string;
+    sets: number;
+    reps: number;
+    weight_kg: number | null;
+    rest_seconds: number;
+    notes: string | null;
+  }[];
+};
+
+export async function saveCustomWorkoutSheet(
+  studentId: string,
+  studentName: string,
+  sessions: CustomSessionInput[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const nonEmpty = sessions.filter((s) => s.exercises.length > 0);
+  if (nonEmpty.length === 0) {
+    return { ok: false, error: "Adicione pelo menos um exercício antes de salvar." };
+  }
+
+  const admin = createAdminClient();
+
+  for (const session of nonEmpty) {
+    const { data: collection, error: colErr } = await admin
+      .from("exercise_collections")
+      .insert({
+        name: `${studentName.trim()} — Sessão ${session.label}`,
+        created_by: auth.userId,
+        gym_id: auth.gymId,
+        estimated_duration_minutes: 60,
+      })
+      .select("id")
+      .single();
+
+    if (colErr || !collection) {
+      console.error("saveCustomWorkoutSheet collection insert:", colErr);
+      return { ok: false, error: `Erro ao criar sessão ${session.label}.` };
+    }
+
+    const rows = session.exercises.map((ex, i) => ({
+      collection_id: collection.id,
+      exercise_id: ex.exercise_id,
+      sort_order: i + 1,
+      default_sets: ex.sets,
+      default_reps: ex.reps,
+      default_weight_kg: ex.weight_kg,
+      rest_seconds: ex.rest_seconds,
+      notes: ex.notes,
+    }));
+
+    const { error: exErr } = await admin.from("collection_exercises").insert(rows);
+    if (exErr) {
+      console.error("saveCustomWorkoutSheet exercises insert:", exErr);
+      await admin.from("exercise_collections").delete().eq("id", collection.id);
+      return { ok: false, error: `Erro ao salvar exercícios da sessão ${session.label}.` };
+    }
+
+    const { error: schedErr } = await admin.from("workout_schedules").insert({
+      user_id: studentId,
+      collection_id: collection.id,
+      schedule_type: "session",
+      session_label: session.label,
+      sort_order: session.label.charCodeAt(0) - 65,
+    });
+    if (schedErr) console.error("saveCustomWorkoutSheet schedule insert:", schedErr);
+  }
+
+  revalidatePath(`/dashboard/members/${studentId}`);
+  return { ok: true };
+}
+
 // ── Create physical assessment ─────────────────────────────────────────────────
 
 export async function createPhysicalAssessment(
