@@ -366,6 +366,7 @@ export type ExerciseSearchResult = {
   title: string;
   translated_name: string | null;
   youtube_url: string | null;
+  muscle_group: string | null;
 };
 
 export async function searchExercises(query: string): Promise<
@@ -381,7 +382,7 @@ export async function searchExercises(query: string): Promise<
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("exercises")
-    .select("id, title, translated_name, youtube_url")
+    .select("id, title, translated_name, youtube_url, muscle_group")
     .or(`title.ilike.%${q}%,translated_name.ilike.%${q}%`)
     .limit(15);
 

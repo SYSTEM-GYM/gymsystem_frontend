@@ -735,6 +735,19 @@ type CustomSession = {
   rows: SheetRow[];
 };
 
+const MUSCLE_GROUP_LABELS: Record<string, string> = {
+  chest: "Peito",
+  back: "Costas",
+  shoulders: "Ombros",
+  biceps: "Bíceps",
+  triceps: "Tríceps",
+  legs: "Pernas",
+  glutes: "Glúteos",
+  core: "Core / Abdômen",
+  cardio: "Cardio",
+  full_body: "Corpo Inteiro",
+};
+
 function ExerciseSearchPopover({
   onSelect,
   onClose,
@@ -744,69 +757,106 @@ function ExerciseSearchPopover({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ExerciseSearchResult[]>([]);
-  const [searching, startSearch] = useTransition();
+  const [isPending, startSearch] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return; }
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (query.length < 2) {
+      setResults([]);
+      return;
+    }
     const t = setTimeout(() => {
       startSearch(async () => {
         const res = await searchExercises(query);
         if (res.ok) setResults(res.exercises);
       });
-    }, 300);
+    }, 280);
     return () => clearTimeout(t);
   }, [query]);
 
+  const showSpinner = isPending && query.length >= 2;
+  const showEmpty   = !isPending && query.length >= 2 && results.length === 0;
+
   return (
-    <div className="relative">
-      <div className="flex items-center gap-2 mb-1">
-        <input
-          autoFocus
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar exercício pelo nome..."
-          className="flex-1 bg-surface-1 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/40 transition-colors"
-        />
+    /* Wrapper — NOT inside overflow-hidden, so dropdown renders freely */
+    <div className="space-y-2">
+      {/* Input row */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar exercício (ex: supino, agachamento, peito...)"
+            className="w-full bg-zinc-900 border border-white/15 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+          />
+          {showSpinner && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">
+              ···
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onClose}
-          className="p-2 text-zinc-500 hover:text-white transition-colors flex-shrink-0"
+          className="p-2.5 rounded-xl bg-zinc-900 border border-white/10 text-zinc-500 hover:text-white transition-colors flex-shrink-0"
         >
           <XMarkIcon className="w-4 h-4" />
         </button>
       </div>
 
+      {/* Results list — renders in normal flow, NOT absolute, so it pushes content down */}
       {results.length > 0 && (
-        <div className="absolute z-20 left-0 right-0 bg-surface-1 border border-white/10 rounded-2xl overflow-hidden shadow-2xl max-h-64 overflow-y-auto">
-          {results.map((ex) => {
+        <div className="rounded-2xl border border-white/10 bg-zinc-900 overflow-hidden shadow-2xl">
+          {results.map((ex, idx) => {
             const ytId = extractYtId(ex.youtube_url);
+            const displayName = ex.translated_name || ex.title;
+            const muscle = ex.muscle_group
+              ? (MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group)
+              : null;
+            const originalEn = ex.translated_name ? ex.title : null;
+
             return (
               <button
                 key={ex.id}
                 type="button"
-                onClick={() => { onSelect(ex); onClose(); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0"
+                onClick={() => onSelect(ex)}
+                className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-white/[0.06] active:bg-white/10 transition-colors text-left ${
+                  idx < results.length - 1 ? "border-b border-white/5" : ""
+                }`}
               >
+                {/* Thumbnail */}
                 {ytId ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
-                    alt={ex.title}
-                    className="w-10 h-10 object-cover rounded-lg flex-shrink-0 bg-zinc-800"
+                    alt={displayName}
+                    className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-800"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-lg bg-surface-2 flex items-center justify-center flex-shrink-0">
-                    <FilmIcon className="w-4 h-4 text-zinc-600" />
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                    <FilmIcon className="w-5 h-5 text-zinc-600" />
                   </div>
                 )}
-                <div className="min-w-0">
-                  <p className="text-sm text-white font-medium truncate">
-                    {ex.translated_name || ex.title}
+
+                {/* Text */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white leading-snug truncate">
+                    {displayName}
                   </p>
-                  {ex.translated_name && (
-                    <p className="text-xs text-zinc-600 truncate">{ex.title}</p>
-                  )}
+                  <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                    {[muscle, originalEn].filter(Boolean).join(" · ") || "Exercício"}
+                  </p>
+                </div>
+
+                {/* Add cue */}
+                <div className="flex-shrink-0 w-6 h-6 rounded-full border border-white/10 flex items-center justify-center text-zinc-600 group-hover:border-primary group-hover:text-primary transition-colors">
+                  <PlusIcon className="w-3 h-3" />
                 </div>
               </button>
             );
@@ -814,11 +864,13 @@ function ExerciseSearchPopover({
         </div>
       )}
 
-      {searching && query.length >= 2 && (
-        <p className="text-xs text-zinc-600 px-1 py-2">Buscando...</p>
-      )}
-      {!searching && query.length >= 2 && results.length === 0 && (
-        <p className="text-xs text-zinc-600 px-1 py-2">Nenhum exercício encontrado para &ldquo;{query}&rdquo;.</p>
+      {showEmpty && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-900 border border-white/8">
+          <BeakerIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+          <p className="text-xs text-zinc-500">
+            Nenhum exercício encontrado para <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -998,8 +1050,8 @@ function CustomWorkoutEditor({
         )}
       </div>
 
-      {/* Spreadsheet */}
-      <div className="bg-surface-2/40 border border-white/8 rounded-2xl overflow-hidden">
+      {/* Spreadsheet — overflow-hidden only on the table portion so the search dropdown below can render freely */}
+      <div className="rounded-2xl border border-white/8 overflow-hidden bg-surface-2/40">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1112,29 +1164,28 @@ function CustomWorkoutEditor({
             </tbody>
           </table>
         </div>
-
-        {/* Add exercise */}
-        <div className="border-t border-white/8 p-3">
-          {showSearch ? (
-            <ExerciseSearchPopover
-              onSelect={(ex) => {
-                addExercise(ex);
-                setShowSearch(false);
-              }}
-              onClose={() => setShowSearch(false)}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSearch(true)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 border border-dashed border-white/10 hover:text-white hover:border-white/25 transition-colors"
-            >
-              <PlusIcon className="w-3.5 h-3.5" />
-              Adicionar Exercício
-            </button>
-          )}
-        </div>
       </div>
+      {/* ↑ overflow-hidden ends here — search lives outside so dropdown isn't clipped */}
+
+      {/* Add exercise section */}
+      {showSearch ? (
+        <ExerciseSearchPopover
+          onSelect={(ex) => {
+            addExercise(ex);
+            setShowSearch(false);
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowSearch(true)}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-semibold text-zinc-500 border border-dashed border-white/12 hover:text-white hover:border-white/25 hover:bg-white/[0.03] transition-colors"
+        >
+          <PlusIcon className="w-3.5 h-3.5" />
+          Adicionar Exercício à Sessão {sessions[activeIdx]?.label}
+        </button>
+      )}
     </div>
   );
 }
