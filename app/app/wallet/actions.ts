@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type { CouponValidation, StudentCheckoutResult, StudentCheckoutInput } from "@/app/dashboard/finance/plans/actions";
-export { validateCoupon, processStudentCheckout } from "@/app/dashboard/finance/plans/actions";
 
 export type PlanOption = {
   id: string;

@@ -14,7 +14,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { QRCodeGenerator } from "@/app/components/access/QRCodeGenerator";
-import { validateCoupon, processStudentCheckout } from "./actions";
+import { validateCoupon, processStudentCheckout } from "@/app/dashboard/finance/plans/actions";
 import type { WalletData, PlanOption, CouponValidation } from "./actions";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
