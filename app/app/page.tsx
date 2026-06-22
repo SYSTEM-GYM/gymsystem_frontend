@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ExerciseList } from "@/app/components/app/ExerciseList";
-import type { Exercise } from "@/app/components/app/ExerciseVideoModal";
 import { TodayWorkout } from "@/app/components/app/TodayWorkout";
+import { StreakWidget } from "@/app/components/app/StreakWidget";
+import { MuscleHeatmap } from "@/app/components/app/MuscleHeatmap";
 import { resolveTodayWorkout } from "@/lib/workout-utils";
+import { getMuscleHeatmapData } from "@/app/app/workout-actions";
+import Link from "next/link";
+import { BookOpenIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 
 export const revalidate = 60;
 
@@ -26,9 +29,18 @@ function resolveLevel(xp: number) {
   }
   const next = LEVELS[index + 1];
   const progress = next
-    ? Math.min(100, Math.round(((xp - level.min) / (next.min - level.min)) * 100))
+    ? Math.min(
+        100,
+        Math.round(((xp - level.min) / (next.min - level.min)) * 100),
+      )
     : 100;
-  return { label: level.label, color: level.color, levelNum: index + 1, progress, nextXp: next?.min ?? null };
+  return {
+    label: level.label,
+    color: level.color,
+    levelNum: index + 1,
+    progress,
+    nextXp: next?.min ?? null,
+  };
 }
 
 export default async function StudentHomePage() {
@@ -40,20 +52,39 @@ export default async function StudentHomePage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("first_name, full_name, experience_points, plan_type")
+    .select(
+      "first_name, full_name, experience_points, plan_type, current_streak, longest_streak, last_workout_date",
+    )
     .eq("id", user.id)
     .single();
 
-  const firstName = profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Aluno";
-  const xp = profile?.experience_points ?? 0;
-  const { label: levelLabel, color: levelColor, levelNum, progress, nextXp } = resolveLevel(xp);
+  const firstName =
+    profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Aluno";
+  const xp = (profile?.experience_points as number) ?? 0;
+  const currentStreak = (profile?.current_streak as number) ?? 0;
+  const longestStreak = (profile?.longest_streak as number) ?? 0;
+  const lastWorkoutDate = (profile?.last_workout_date as string | null) ?? null;
 
-  const planLabels: Record<string, string> = { basic: "Básico", premium: "Premium", vip: "VIP" };
-  const planLabel = planLabels[profile?.plan_type ?? ""] ?? (profile?.plan_type ?? "");
+  const { label: levelLabel, color: levelColor, levelNum, progress, nextXp } =
+    resolveLevel(xp);
 
-  const todayWorkout = await resolveTodayWorkout(supabase, user.id);
+  const planLabels: Record<string, string> = {
+    basic: "Básico",
+    premium: "Premium",
+    vip: "VIP",
+  };
+  const planLabel =
+    planLabels[profile?.plan_type ?? ""] ?? (profile?.plan_type ?? "");
 
-  const lastLogs: Record<string, { weight_kg: number | null; reps_done: number | null }> = {};
+  const [todayWorkout, muscleVolume] = await Promise.all([
+    resolveTodayWorkout(supabase, user.id),
+    getMuscleHeatmapData(),
+  ]);
+
+  const lastLogs: Record<
+    string,
+    { weight_kg: number | null; reps_done: number | null }
+  > = {};
   if (todayWorkout && todayWorkout.exercises.length > 0) {
     const exerciseIds = todayWorkout.exercises.map((e) => e.exercise_id);
     const { data: logs } = await supabase
@@ -73,14 +104,9 @@ export default async function StudentHomePage() {
     }
   }
 
-  const { data: exercises } = await supabase
-    .from("exercises")
-    .select("id, title, translated_name, description, instructions, youtube_url, webm_path, video_url")
-    .order("title")
-    .returns<Exercise[]>();
-
   return (
     <div className="space-y-6">
+      {/* Greeting */}
       <div>
         <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
           Bem-vindo de volta
@@ -93,10 +119,13 @@ export default async function StudentHomePage() {
         )}
       </div>
 
+      {/* XP Level Widget */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-500 uppercase tracking-wide">Nível {levelNum}</p>
+            <p className="text-xs text-zinc-500 uppercase tracking-wide">
+              Nível {levelNum}
+            </p>
             <p className={`text-lg font-black ${levelColor}`}>{levelLabel}</p>
           </div>
           <div className="text-right">
@@ -121,23 +150,46 @@ export default async function StudentHomePage() {
         </div>
       </div>
 
+      {/* Streak / Ofensiva */}
+      <StreakWidget
+        currentStreak={currentStreak}
+        longestStreak={longestStreak}
+        lastWorkoutDate={lastWorkoutDate}
+      />
+
+      {/* Today's Workout */}
       {todayWorkout ? (
         <TodayWorkout workout={todayWorkout} lastLogs={lastLogs} />
       ) : (
         <div className="p-6 bg-surface-1 border border-dashed border-white/10 rounded-3xl text-center">
-          <p className="text-sm font-semibold text-zinc-500">Nenhum treino agendado para hoje</p>
+          <p className="text-sm font-semibold text-zinc-500">
+            Nenhum treino agendado para hoje
+          </p>
           <p className="text-xs text-zinc-600 mt-1">
             Peça ao seu personal para atribuir uma ficha de treino.
           </p>
         </div>
       )}
 
-      <div>
-        <h2 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-3">
-          Biblioteca de Exercícios
-        </h2>
-        <ExerciseList exercises={exercises ?? []} />
-      </div>
+      {/* Muscle Heatmap */}
+      <MuscleHeatmap volume={muscleVolume} />
+
+      {/* Library shortcut */}
+      <Link
+        href="/app/library"
+        className="flex items-center gap-3 p-4 bg-surface-1 border border-white/5 rounded-2xl hover:border-primary/20 transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <BookOpenIcon className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">Biblioteca de Exercícios</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Vídeos, instruções e técnicas de todos os exercícios
+          </p>
+        </div>
+        <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors flex-shrink-0" />
+      </Link>
     </div>
   );
 }

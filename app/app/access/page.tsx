@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { QrDisplay } from "@/app/components/app/QrDisplay";
+import { TurnstileScanner } from "@/app/components/app/TurnstileScanner";
 
 export default async function AccessPage() {
   const supabase = await createClient();
@@ -15,11 +16,11 @@ export default async function AccessPage() {
     .eq("id", user.id)
     .single();
 
-  const firstName  = profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Aluno";
-  const isActive   = profile?.status === "active";
-  const homeGymId  = profile?.home_gym_id ?? null;
+  const firstName =
+    profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Aluno";
+  const isActive = profile?.status === "active";
+  const homeGymId = profile?.home_gym_id ?? null;
 
-  // Resolve gym name
   let gymName: string | null = null;
   if (homeGymId) {
     const { data: gym } = await supabase
@@ -31,11 +32,14 @@ export default async function AccessPage() {
   }
 
   return (
-    <QrDisplay
-      userId={user.id}
-      firstName={firstName}
-      isActive={isActive}
-      gymName={gymName}
-    />
+    <>
+      <QrDisplay
+        userId={user.id}
+        firstName={firstName}
+        isActive={isActive}
+        gymName={gymName}
+      />
+      <TurnstileScanner />
+    </>
   );
 }
