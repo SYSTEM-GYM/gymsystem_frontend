@@ -5,6 +5,7 @@ import {
   Cog6ToothIcon,
   ClipboardDocumentListIcon,
   ShoppingCartIcon,
+  ChatBubbleLeftEllipsisIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
 import type { UserRole } from "@/app/dashboard/layout";
@@ -29,6 +30,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/finance",        label: "Financeiro",     icon: BanknotesIcon,                 minRole: "admin" },
   { href: "/dashboard/finance/plans", label: "Balcão",         icon: ShoppingCartIcon,              minRole: "admin" },
   { href: "/dashboard/workouts",       label: "Treinos",        icon: ClipboardDocumentListIcon,     minRole: "admin" },
+  { href: "/dashboard/marketing/whatsapp", label: "WhatsApp CRM", icon: ChatBubbleLeftEllipsisIcon, minRole: "admin" },
   { href: "/dashboard/settings",  label: "Configurações",  icon: Cog6ToothIcon,                           minRole: "admin"    },
 ];
 
