@@ -39,6 +39,9 @@ type BuilderItem = {
   exercise: ExerciseOption;
   sets: number;
   reps: number;
+  weight_kg: number | null;
+  rest_seconds: number;
+  notes: string;
 };
 
 type Props = {
@@ -69,7 +72,7 @@ function ExerciseThumbnail({ exercise }: { exercise: ExerciseOption }) {
         autoPlay
         loop
         playsInline
-        className="w-14 h-14 object-cover rounded-2xl flex-shrink-0 bg-zinc-900"
+        className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-900"
       />
     );
   }
@@ -79,13 +82,13 @@ function ExerciseThumbnail({ exercise }: { exercise: ExerciseOption }) {
       <img
         src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
         alt={exercise.title}
-        className="w-14 h-14 object-cover rounded-2xl flex-shrink-0 bg-zinc-900"
+        className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-900"
       />
     );
   }
   return (
-    <div className="w-14 h-14 rounded-2xl bg-surface-2 flex items-center justify-center flex-shrink-0">
-      <FilmIcon className="w-6 h-6 text-zinc-600" />
+    <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center flex-shrink-0">
+      <FilmIcon className="w-5 h-5 text-zinc-600" />
     </div>
   );
 }
@@ -117,7 +120,6 @@ function ExerciseCombobox({
     );
   }, [exercises, usedIds, query]);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -140,7 +142,7 @@ function ExerciseCombobox({
         htmlFor={inputId}
         className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2"
       >
-        Buscar exercício
+        Adicionar exercício
       </label>
       <div className="relative">
         <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
@@ -148,12 +150,9 @@ function ExerciseCombobox({
           id={inputId}
           type="text"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="Buscar exercício..."
+          placeholder="Buscar exercício para adicionar..."
           autoComplete="off"
           className="w-full pl-11 pr-4 py-3 bg-surface-2 border border-white/10 rounded-2xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
         />
@@ -204,8 +203,7 @@ function BuilderItemRow({
   item,
   index,
   onRemove,
-  onChangeSets,
-  onChangeReps,
+  onChange,
   isDragging,
   onDragStart,
   onDragOver,
@@ -214,14 +212,13 @@ function BuilderItemRow({
   item: BuilderItem;
   index: number;
   onRemove: () => void;
-  onChangeSets: (v: number) => void;
-  onChangeReps: (v: number) => void;
+  onChange: (patch: Partial<BuilderItem>) => void;
   isDragging: boolean;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
-  const inputCls =
+  const cellCls =
     "w-16 bg-surface-2 border border-white/10 rounded-xl px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-primary/50 transition-colors tabular-nums";
 
   return (
@@ -230,59 +227,113 @@ function BuilderItemRow({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      className={`flex items-center gap-3 p-3 bg-surface-1 border rounded-2xl transition-all ${
-        isDragging
-          ? "border-primary/40 opacity-50"
-          : "border-white/5 hover:border-white/10"
+      className={`flex items-start gap-3 p-3 bg-surface-1 border rounded-2xl transition-all ${
+        isDragging ? "border-primary/40 opacity-50" : "border-white/5 hover:border-white/10"
       }`}
     >
-      <Bars3Icon className="w-4 h-4 text-zinc-600 flex-shrink-0 cursor-grab active:cursor-grabbing" />
+      {/* Drag handle */}
+      <div className="pt-2">
+        <Bars3Icon className="w-4 h-4 text-zinc-600 cursor-grab active:cursor-grabbing" />
+      </div>
 
-      <span className="w-5 text-xs text-zinc-600 tabular-nums text-center flex-shrink-0">
+      {/* Index */}
+      <span className="w-5 text-xs text-zinc-600 tabular-nums text-center flex-shrink-0 pt-2.5">
         {index + 1}
       </span>
 
-      <ExerciseThumbnail exercise={item.exercise} />
+      {/* Thumbnail */}
+      <div className="pt-0.5">
+        <ExerciseThumbnail exercise={item.exercise} />
+      </div>
 
+      {/* Exercise info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white truncate">
+        <p className="text-sm font-semibold text-white truncate pt-1">
           {item.exercise.translated_name || item.exercise.title}
         </p>
         {item.exercise.primary_muscle && (
           <p className="text-xs text-zinc-500 capitalize mt-0.5">{item.exercise.primary_muscle}</p>
         )}
+
+        {/* Inline parameters — spreadsheet style */}
+        <div className="flex flex-wrap items-end gap-3 mt-3">
+          {/* Séries */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Séries</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={item.sets}
+              onChange={(e) => onChange({ sets: Math.max(1, parseInt(e.target.value) || 1) })}
+              className={cellCls}
+            />
+          </div>
+
+          <span className="text-zinc-700 text-xs mb-1.5">×</span>
+
+          {/* Reps */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Reps</span>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={item.reps}
+              onChange={(e) => onChange({ reps: Math.max(1, parseInt(e.target.value) || 1) })}
+              className={cellCls}
+            />
+          </div>
+
+          {/* Weight */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Carga (kg)</span>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              placeholder="—"
+              value={item.weight_kg ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onChange({ weight_kg: v === "" ? null : parseFloat(v) || 0 });
+              }}
+              className={`${cellCls} w-20`}
+            />
+          </div>
+
+          {/* Rest */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Descanso (s)</span>
+            <input
+              type="number"
+              min={0}
+              step={15}
+              value={item.rest_seconds}
+              onChange={(e) => onChange({ rest_seconds: Math.max(0, parseInt(e.target.value) || 0) })}
+              className={`${cellCls} w-20`}
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Observação</span>
+            <input
+              type="text"
+              placeholder="Ex: cadência lenta..."
+              value={item.notes}
+              onChange={(e) => onChange({ notes: e.target.value })}
+              className="bg-surface-2 border border-white/10 rounded-xl px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 transition-colors w-full"
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] text-zinc-600 uppercase tracking-wider">Séries</span>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={item.sets}
-            onChange={(e) => onChangeSets(Math.max(1, parseInt(e.target.value) || 1))}
-            className={inputCls}
-          />
-        </div>
-        <span className="text-zinc-700 text-xs mt-3">×</span>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] text-zinc-600 uppercase tracking-wider">Reps</span>
-          <input
-            type="number"
-            min={1}
-            max={200}
-            value={item.reps}
-            onChange={(e) => onChangeReps(Math.max(1, parseInt(e.target.value) || 1))}
-            className={inputCls}
-          />
-        </div>
-      </div>
-
+      {/* Remove */}
       <button
         type="button"
         onClick={onRemove}
-        className="p-2 text-zinc-600 hover:text-danger transition-colors flex-shrink-0"
+        className="p-2 text-zinc-600 hover:text-danger transition-colors flex-shrink-0 pt-2"
         aria-label="Remover exercício"
       >
         <TrashIcon className="w-4 h-4" />
@@ -297,27 +348,30 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Form fields
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [gymId, setGymId] = useState("");
   const [duration, setDuration] = useState(60);
 
-  // Exercise list
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
-  // Feedback
-  const [result, setResult] = useState<
-    { ok: true } | { ok: false; message: string } | null
-  >(null);
+  const [result, setResult] = useState<{ ok: true } | { ok: false; message: string } | null>(null);
 
   const usedIds = useMemo(() => new Set(items.map((i) => i.exercise.id)), [items]);
 
   const addExercise = useCallback((ex: ExerciseOption) => {
     setItems((prev) => [
       ...prev,
-      { key: `${ex.id}-${Date.now()}`, exercise: ex, sets: 3, reps: 12 },
+      {
+        key: `${ex.id}-${Date.now()}`,
+        exercise: ex,
+        sets: 3,
+        reps: 12,
+        weight_kg: null,
+        rest_seconds: 60,
+        notes: "",
+      },
     ]);
   }, []);
 
@@ -325,11 +379,10 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
     setItems((prev) => prev.filter((i) => i.key !== key));
   }
 
-  function updateItem(key: string, patch: Partial<Pick<BuilderItem, "sets" | "reps">>) {
+  function updateItem(key: string, patch: Partial<BuilderItem>) {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   }
 
-  // Drag-and-drop reorder
   function handleDragOver(e: React.DragEvent, overIdx: number) {
     e.preventDefault();
     if (dragIdx === null || dragIdx === overIdx) return;
@@ -355,6 +408,9 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
           sort_order: i,
           default_sets: item.sets,
           default_reps: item.reps,
+          default_weight_kg: item.weight_kg,
+          rest_seconds: item.rest_seconds,
+          notes: item.notes || null,
         })),
       });
 
@@ -384,9 +440,7 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
           <ArrowLeftIcon className="w-5 h-5" />
         </button>
         <div>
-          <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest">
-            Nova Ficha
-          </p>
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Nova Ficha</p>
           <h1 className="text-2xl font-black text-white">Montar Treino</h1>
         </div>
       </div>
@@ -418,11 +472,7 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Filial <span className="text-zinc-600 normal-case">(opcional)</span></label>
-            <select
-              value={gymId}
-              onChange={(e) => setGymId(e.target.value)}
-              className={inputCls}
-            >
+            <select value={gymId} onChange={(e) => setGymId(e.target.value)} className={inputCls}>
               <option value="">Todas as filiais</option>
               {gyms.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
@@ -445,14 +495,10 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
 
       {/* Exercise selector */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl p-6">
-        <ExerciseCombobox
-          exercises={exercises}
-          usedIds={usedIds}
-          onSelect={addExercise}
-        />
+        <ExerciseCombobox exercises={exercises} usedIds={usedIds} onSelect={addExercise} />
       </div>
 
-      {/* Exercise list */}
+      {/* Exercise list — spreadsheet builder */}
       <div className="space-y-3">
         {items.length === 0 ? (
           <div className="p-10 bg-surface-1 border border-dashed border-white/10 rounded-3xl text-center space-y-2">
@@ -476,8 +522,7 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
                   item={item}
                   index={idx}
                   onRemove={() => removeItem(item.key)}
-                  onChangeSets={(v) => updateItem(item.key, { sets: v })}
-                  onChangeReps={(v) => updateItem(item.key, { reps: v })}
+                  onChange={(patch) => updateItem(item.key, patch)}
                   isDragging={dragIdx === idx}
                   onDragStart={() => setDragIdx(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
@@ -503,7 +548,7 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
         </div>
       )}
 
-      {/* Save button */}
+      {/* Save */}
       <button
         type="button"
         onClick={handleSubmit}

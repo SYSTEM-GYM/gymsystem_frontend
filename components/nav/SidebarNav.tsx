@@ -3,13 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
-import { ArrowLeftStartOnRectangleIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowLeftStartOnRectangleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 import type { UserRole } from "@/app/dashboard/layout";
 import { getVisibleNavItems } from "./navItems";
 
-type Props = { role: UserRole };
+type Props = {
+  role: UserRole;
+  expanded?: boolean;
+  onToggle?: () => void;
+};
 
-export function SidebarNav({ role }: Props) {
+export function SidebarNav({ role, expanded = false, onToggle }: Props) {
   const pathname = usePathname();
   const navItems = getVisibleNavItems(role);
 
@@ -17,52 +25,107 @@ export function SidebarNav({ role }: Props) {
     return exact ? pathname === href : pathname.startsWith(href);
   }
 
+  const itemCls = (active: boolean) =>
+    `flex items-center gap-3 transition-all duration-200 ${
+      expanded
+        ? "w-full px-3 py-2.5 rounded-xl"
+        : "w-11 h-11 justify-center rounded-2xl"
+    } ${
+      active
+        ? "bg-primary text-black shadow-[0_0_20px_rgba(193,244,41,0.25)]"
+        : "text-zinc-500 hover:bg-surface-2 hover:text-white"
+    }`;
+
   return (
-    <nav className="flex flex-col items-center h-full py-6 gap-2">
-      {/* Logo mark */}
-      <div className="mb-6 flex flex-col items-center">
-        <span className="text-base font-black tracking-tighter text-primary leading-none">
-          S
-        </span>
-        <span className="text-[8px] text-zinc-600 uppercase tracking-widest mt-0.5">
-          IMP
-        </span>
+    <nav className="flex flex-col h-full py-5 gap-1">
+      {/* Logo row + toggle */}
+      <div
+        className={`flex items-center mb-5 px-3 ${
+          expanded ? "justify-between" : "justify-center"
+        }`}
+      >
+        <div
+          className={`flex items-center ${
+            expanded ? "gap-2" : "flex-col"
+          }`}
+        >
+          <span className="text-base font-black tracking-tighter text-primary leading-none">
+            S
+          </span>
+          {expanded ? (
+            <span className="text-sm font-black tracking-tighter text-white">
+              IMP
+            </span>
+          ) : (
+            <span className="text-[8px] text-zinc-600 uppercase tracking-widest mt-0.5">
+              IMP
+            </span>
+          )}
+        </div>
+
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            aria-label={expanded ? "Recolher menu" : "Expandir menu"}
+            className="p-1.5 rounded-lg text-zinc-600 hover:text-white hover:bg-surface-2 transition-colors flex-shrink-0"
+          >
+            {expanded ? (
+              <ChevronLeftIcon className="w-4 h-4" />
+            ) : (
+              <ChevronRightIcon className="w-4 h-4" />
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Nav icon pills */}
-      <ul className="flex flex-col items-center gap-2 flex-1">
+      {/* Nav items */}
+      <ul
+        className={`flex flex-col gap-1 flex-1 ${
+          expanded ? "px-3" : "items-center px-0"
+        }`}
+      >
         {navItems.map(({ href, label, icon: Icon, exact }) => {
           const active = isActive(href, exact);
           return (
-            <li key={href}>
+            <li key={href} className={expanded ? "w-full" : ""}>
               <Link
                 href={href}
                 aria-label={label}
-                title={label}
-                className={`flex items-center justify-center w-11 h-11 rounded-2xl transition-all duration-200 ${
-                  active
-                    ? "bg-primary text-black shadow-[0_0_20px_rgba(193,244,41,0.25)]"
-                    : "text-zinc-500 hover:bg-surface-2 hover:text-white"
-                }`}
+                title={!expanded ? label : undefined}
+                className={itemCls(active)}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                {expanded && (
+                  <span className="text-sm font-semibold whitespace-nowrap">
+                    {label}
+                  </span>
+                )}
               </Link>
             </li>
           );
         })}
       </ul>
 
-      {/* Logout icon */}
-      <form action={signOut} className="mt-auto">
-        <button
-          type="submit"
-          aria-label="Sair"
-          title="Sair"
-          className="flex items-center justify-center w-11 h-11 rounded-2xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-all duration-200"
-        >
-          <ArrowLeftStartOnRectangleIcon className="w-5 h-5" />
-        </button>
-      </form>
+      {/* Logout */}
+      <div className={`mt-auto ${expanded ? "px-3" : "flex justify-center"}`}>
+        <form action={signOut}>
+          <button
+            type="submit"
+            aria-label="Sair"
+            title={!expanded ? "Sair" : undefined}
+            className={`flex items-center gap-3 ${
+              expanded
+                ? "w-full px-3 py-2.5 rounded-xl"
+                : "w-11 h-11 justify-center rounded-2xl"
+            } text-zinc-600 hover:bg-danger/10 hover:text-danger transition-all duration-200`}
+          >
+            <ArrowLeftStartOnRectangleIcon className="w-5 h-5 flex-shrink-0" />
+            {expanded && (
+              <span className="text-sm font-semibold">Sair</span>
+            )}
+          </button>
+        </form>
+      </div>
     </nav>
   );
 }

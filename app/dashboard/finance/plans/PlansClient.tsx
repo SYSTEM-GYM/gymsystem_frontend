@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useRef } from "react";
+import { useState, useTransition, useCallback, useRef, useEffect } from "react";
 import {
   ShoppingCartIcon,
   TagIcon,
@@ -13,6 +13,7 @@ import {
   ArrowPathIcon,
   ClipboardDocumentIcon,
   NoSymbolIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import {
   getCoupons,
@@ -25,7 +26,11 @@ import {
   type StudentOption,
   type CouponValidation,
 } from "./actions";
-import { createPlan, type GymPlan } from "@/app/dashboard/finance/subscription-actions";
+import {
+  createPlan,
+  updatePlan,
+  type GymPlan,
+} from "@/app/dashboard/finance/subscription-actions";
 import type { DailyPassRow } from "./page";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,10 +81,10 @@ export function PlansClient({ initialPlans, initialCoupons, initialPasses }: Pro
   const [passes] = useState(initialPasses);
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: "plans",   label: "Planos",   icon: CreditCardIcon   },
-    { id: "balcao",  label: "Balcão",   icon: ShoppingCartIcon },
-    { id: "coupons", label: "Cupons",   icon: TagIcon          },
-    { id: "passes",  label: "Passes",   icon: TicketIcon       },
+    { id: "plans",   label: "Planos",  icon: CreditCardIcon   },
+    { id: "balcao",  label: "Balcão",  icon: ShoppingCartIcon },
+    { id: "coupons", label: "Cupons",  icon: TagIcon          },
+    { id: "passes",  label: "Passes",  icon: TicketIcon       },
   ];
 
   return (
@@ -102,7 +107,6 @@ export function PlansClient({ initialPlans, initialCoupons, initialPasses }: Pro
         ))}
       </div>
 
-      {/* Tab content */}
       {activeTab === "plans"   && <PlansTab   plans={plans}   onPlansChange={setPlans} />}
       {activeTab === "balcao"  && <BalcaoTab  plans={plans}   coupons={coupons} />}
       {activeTab === "coupons" && <CouponsTab coupons={coupons} onCouponsChange={setCoupons} />}
@@ -121,31 +125,32 @@ function PlansTab({
   onPlansChange: (p: GymPlan[]) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = (fd.get("name") as string).trim();
+    const description = (fd.get("description") as string).trim() || null;
     const price = parseFloat((fd.get("price") as string).replace(",", "."));
     const billing_cycle = fd.get("billing_cycle") as "monthly" | "quarterly" | "yearly";
 
     if (!name || isNaN(price) || price <= 0) {
-      setError("Preencha todos os campos corretamente.");
+      setError("Preencha nome e valor corretamente.");
       return;
     }
 
     startTransition(async () => {
-      const res = await createPlan({ name, price, billing_cycle });
+      const res = await createPlan({ name, description, price, billing_cycle });
       if (res.ok) {
-        // Optimistic: re-fetch would normally happen via revalidatePath;
-        // for instant feel add optimistically
         onPlansChange([
           ...plans,
           {
             id: crypto.randomUUID(),
             name,
+            description,
             price,
             billing_cycle,
             active: true,
@@ -159,12 +164,46 @@ function PlansTab({
     });
   }
 
+  function handleUpdate(plan: GymPlan, e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = (fd.get("name") as string).trim();
+    const description = (fd.get("description") as string).trim() || null;
+    const price = parseFloat((fd.get("price") as string).replace(",", "."));
+    const billing_cycle = fd.get("billing_cycle") as "monthly" | "quarterly" | "yearly";
+
+    if (!name || isNaN(price) || price <= 0) {
+      setError("Preencha nome e valor corretamente.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await updatePlan({ id: plan.id, name, description, price, billing_cycle });
+      if (res.ok) {
+        onPlansChange(
+          plans.map((p) =>
+            p.id === plan.id ? { ...p, name, description, price, billing_cycle } : p
+          )
+        );
+        setEditingId(null);
+        setError(null);
+      } else {
+        setError(res.message);
+      }
+    });
+  }
+
+  const inputCls =
+    "bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50";
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-500">{plans.length} plano{plans.length !== 1 ? "s" : ""} cadastrado{plans.length !== 1 ? "s" : ""}</p>
+        <p className="text-sm text-zinc-500">
+          {plans.length} plano{plans.length !== 1 ? "s" : ""} cadastrado{plans.length !== 1 ? "s" : ""}
+        </p>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setError(null); }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <PlusIcon className="w-4 h-4" />
@@ -172,49 +211,31 @@ function PlansTab({
         </button>
       </div>
 
-      {/* Inline create form */}
+      {/* Create form */}
       {showForm && (
         <div className="bg-surface-1 border border-white/8 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-semibold text-white">Novo Plano de Assinatura</h3>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <form onSubmit={handleCreate} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input name="name" required placeholder="Nome do plano" className={inputCls} />
+              <input name="price" type="number" step="0.01" min="0" required placeholder="Valor (R$)" className={inputCls} />
+              <select name="billing_cycle" defaultValue="monthly" className={inputCls}>
+                <option value="monthly">Mensal</option>
+                <option value="quarterly">Trimestral</option>
+                <option value="yearly">Anual</option>
+              </select>
+            </div>
             <input
-              name="name"
-              required
-              placeholder="Nome do plano"
-              className="bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50"
+              name="description"
+              placeholder="Descrição (opcional) — ex: Acesso ilimitado + aula de spinning"
+              className={`${inputCls} w-full`}
             />
-            <input
-              name="price"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              placeholder="Valor (R$)"
-              className="bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50"
-            />
-            <select
-              name="billing_cycle"
-              defaultValue="monthly"
-              className="bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-primary/50"
-            >
-              <option value="monthly">Mensal</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="yearly">Anual</option>
-            </select>
-            {error && <p className="sm:col-span-3 text-xs text-danger">{error}</p>}
-            <div className="sm:col-span-3 flex gap-3">
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50"
-              >
+            {error && <p className="text-xs text-danger">{error}</p>}
+            <div className="flex gap-3">
+              <button type="submit" disabled={isPending} className="px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50">
                 {isPending ? "Salvando..." : "Criar Plano"}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-5 py-2.5 rounded-xl bg-surface-2 text-zinc-400 text-sm font-semibold hover:text-white"
-              >
+              <button type="button" onClick={() => { setShowForm(false); setError(null); }} className="px-5 py-2.5 rounded-xl bg-surface-2 text-zinc-400 text-sm font-semibold hover:text-white">
                 Cancelar
               </button>
             </div>
@@ -234,10 +255,12 @@ function PlansTab({
             <thead>
               <tr className="border-b border-white/5">
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Nome</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden md:table-cell">Descrição</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Ciclo</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Valor</th>
-                <th className="text-right px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">MRR equiv.</th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden lg:table-cell">MRR equiv.</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -246,16 +269,66 @@ function PlansTab({
                   plan.billing_cycle === "monthly" ? plan.price
                   : plan.billing_cycle === "quarterly" ? plan.price / 3
                   : plan.price / 12;
+
+                if (editingId === plan.id) {
+                  return (
+                    <tr key={plan.id} className="bg-surface-2/30">
+                      <td colSpan={7} className="px-5 py-4">
+                        <form onSubmit={(e) => handleUpdate(plan, e)} className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <input name="name" defaultValue={plan.name} required placeholder="Nome" className={inputCls} />
+                            <input name="price" type="number" step="0.01" min="0" defaultValue={plan.price} required placeholder="Valor (R$)" className={inputCls} />
+                            <select name="billing_cycle" defaultValue={plan.billing_cycle} className={inputCls}>
+                              <option value="monthly">Mensal</option>
+                              <option value="quarterly">Trimestral</option>
+                              <option value="yearly">Anual</option>
+                            </select>
+                          </div>
+                          <input
+                            name="description"
+                            defaultValue={plan.description ?? ""}
+                            placeholder="Descrição (opcional)"
+                            className={`${inputCls} w-full`}
+                          />
+                          {error && <p className="text-xs text-danger">{error}</p>}
+                          <div className="flex gap-3">
+                            <button type="submit" disabled={isPending} className="px-4 py-2 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50">
+                              {isPending ? "Salvando..." : "Salvar"}
+                            </button>
+                            <button type="button" onClick={() => { setEditingId(null); setError(null); }} className="px-4 py-2 rounded-xl bg-surface-2 text-zinc-400 text-sm font-semibold hover:text-white">
+                              Cancelar
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                }
+
                 return (
                   <tr key={plan.id} className="hover:bg-surface-2/50 transition-colors">
-                    <td className="px-5 py-3.5 font-semibold text-zinc-200">{plan.name}</td>
+                    <td className="px-5 py-3.5">
+                      <p className="font-semibold text-zinc-200">{plan.name}</p>
+                    </td>
+                    <td className="px-4 py-3.5 hidden md:table-cell">
+                      <p className="text-xs text-zinc-500 max-w-[200px] truncate">{plan.description ?? "—"}</p>
+                    </td>
                     <td className="px-4 py-3.5 text-xs text-zinc-500">{CYCLE_LABELS[plan.billing_cycle]}</td>
                     <td className="px-4 py-3.5 text-right font-semibold text-primary tabular-nums">{fmt(plan.price)}</td>
-                    <td className="px-5 py-3.5 text-right text-xs text-zinc-500 tabular-nums">{fmt(mrrEquiv)}/mês</td>
+                    <td className="px-5 py-3.5 text-right text-xs text-zinc-500 tabular-nums hidden lg:table-cell">{fmt(mrrEquiv)}/mês</td>
                     <td className="px-4 py-3.5 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${plan.active ? "bg-primary/10 text-primary border-primary/20" : "bg-zinc-700/30 text-zinc-500 border-zinc-700/50"}`}>
                         {plan.active ? "Ativo" : "Inativo"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <button
+                        onClick={() => { setEditingId(plan.id); setError(null); setShowForm(false); }}
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-white transition-colors"
+                        title="Editar plano"
+                      >
+                        <PencilIcon className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -276,7 +349,6 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
   const [student, setStudent] = useState<StudentOption | null>(null);
   const [productType, setProductType] = useState<"plan" | "daily_pass">("plan");
   const [selectedPlan, setSelectedPlan] = useState<GymPlan | null>(null);
@@ -289,15 +361,10 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
 
   const baseAmount = productType === "plan"
     ? (selectedPlan?.price ?? 0)
-    : passQty * 20; // default pass price — in real usage, fetch from config
+    : passQty * 20;
 
-  const finalAmount = couponResult?.valid
-    ? couponResult.final_amount
-    : baseAmount;
-
-  const discount = couponResult?.valid
-    ? couponResult.discount_percentage
-    : 0;
+  const finalAmount = couponResult?.valid ? couponResult.final_amount : baseAmount;
+  const discount = couponResult?.valid ? couponResult.discount_percentage : 0;
 
   async function handleApplyCoupon() {
     if (!couponCode) return;
@@ -369,12 +436,7 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
                   {copiedUrl ? <CheckCircleIcon className="w-4 h-4 text-primary" /> : <ClipboardDocumentIcon className="w-4 h-4" />}
                 </button>
               </div>
-              <a
-                href={result.stripe_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold"
-              >
+              <a href={result.stripe_url} target="_blank" rel="noopener noreferrer" className="inline-block px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold">
                 Abrir Link
               </a>
             </div>
@@ -439,7 +501,11 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
                   onClick={() => setSelectedPlan(p)}
                   className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-all ${selectedPlan?.id === p.id ? "bg-primary/10 border-primary/30" : "bg-surface-2 border-white/5 hover:border-white/10"}`}
                 >
-                  <span className="font-semibold text-zinc-200">{p.name} <span className="text-zinc-500 font-normal">({CYCLE_LABELS[p.billing_cycle]})</span></span>
+                  <div className="text-left">
+                    <span className="font-semibold text-zinc-200">{p.name}</span>
+                    <span className="text-zinc-500 font-normal ml-1">({CYCLE_LABELS[p.billing_cycle]})</span>
+                    {p.description && <p className="text-xs text-zinc-600 mt-0.5">{p.description}</p>}
+                  </div>
                   <span className={`font-bold tabular-nums ${selectedPlan?.id === p.id ? "text-primary" : "text-zinc-400"}`}>{fmt(p.price)}</span>
                 </button>
               ))}
@@ -450,15 +516,9 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
             <div className="flex items-center gap-4">
               <label className="text-sm text-zinc-400">Quantidade de passes:</label>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setPassQty(Math.max(1, passQty - 1))}
-                  className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center"
-                >−</button>
+                <button onClick={() => setPassQty(Math.max(1, passQty - 1))} className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center">−</button>
                 <span className="text-base font-bold text-white w-8 text-center tabular-nums">{passQty}</span>
-                <button
-                  onClick={() => setPassQty(Math.min(30, passQty + 1))}
-                  className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center"
-                >+</button>
+                <button onClick={() => setPassQty(Math.min(30, passQty + 1))} className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center">+</button>
               </div>
             </div>
           )}
@@ -485,7 +545,7 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
           {couponResult && (
             <p className={`text-xs font-medium ${couponResult.valid ? "text-primary" : "text-danger"}`}>
               {couponResult.valid
-                ? `✓ ${couponResult.discount_percentage}% de desconto aplicado → ${fmt(couponResult.final_amount)}`
+                ? `✓ ${couponResult.discount_percentage}% de desconto → ${fmt(couponResult.final_amount)}`
                 : `✗ ${couponResult.message}`}
             </p>
           )}
@@ -546,53 +606,90 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
   );
 }
 
-// ── Student search sub-component ──────────────────────────────────────────────
+// ── Student search — loads on focus, filters locally ──────────────────────────
 
 function StudentSearch({ onSelect }: { onSelect: (s: StudentOption) => void }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<StudentOption[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleChange = useCallback((value: string) => {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.length < 2) { setResults([]); return; }
+  const filtered = allStudents.filter((s) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+  });
 
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      const res = await searchStudents(value);
-      setResults(res);
-      setSearching(false);
-    }, 300);
+  async function loadStudents(q = "") {
+    setLoading(true);
+    const res = await searchStudents(q);
+    setAllStudents(res);
+    setLoading(false);
+  }
+
+  function handleFocus() {
+    setOpen(true);
+    if (allStudents.length === 0) {
+      loadStudents("");
+    }
+  }
+
+  function handleChange(value: string) {
+    setQuery(value);
+    setOpen(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.length >= 2) {
+      debounceRef.current = setTimeout(() => loadStudents(value), 300);
+    } else if (value.length === 0) {
+      loadStudents("");
+    }
+  }
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <div className="flex items-center bg-surface-2 border border-white/8 rounded-xl px-3 py-2.5 gap-2">
         <MagnifyingGlassIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
         <input
           value={query}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Buscar aluno por nome ou email..."
+          onFocus={handleFocus}
+          placeholder="Clique para ver membros ou busque por nome..."
           className="flex-1 bg-transparent text-sm text-white placeholder-zinc-600 outline-none"
         />
-        {searching && <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-500 animate-spin" />}
+        {loading && <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-500 animate-spin" />}
       </div>
 
-      {results.length > 0 && (
-        <ul className="absolute top-full left-0 right-0 mt-1 bg-surface-1 border border-white/8 rounded-xl overflow-hidden z-20 shadow-2xl">
-          {results.map((s) => (
-            <li key={s.id}>
-              <button
-                onClick={() => { onSelect(s); setResults([]); setQuery(""); }}
-                className="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors"
-              >
-                <p className="text-sm font-semibold text-zinc-200">{s.full_name}</p>
-                <p className="text-xs text-zinc-500">{s.email}</p>
-              </button>
+      {open && (
+        <ul className="absolute top-full left-0 right-0 mt-1 bg-surface-1 border border-white/8 rounded-xl overflow-hidden z-20 shadow-2xl max-h-64 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <li className="px-4 py-3 text-sm text-zinc-500 text-center">
+              {loading ? "Carregando..." : "Nenhum membro encontrado."}
             </li>
-          ))}
+          ) : (
+            filtered.slice(0, 20).map((s) => (
+              <li key={s.id}>
+                <button
+                  onMouseDown={() => { onSelect(s); setOpen(false); setQuery(""); }}
+                  className="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors"
+                >
+                  <p className="text-sm font-semibold text-zinc-200">{s.full_name}</p>
+                  <p className="text-xs text-zinc-500">{s.email}</p>
+                </button>
+              </li>
+            ))
+          )}
         </ul>
       )}
     </div>
@@ -619,8 +716,7 @@ function CouponsTab({
     const fd = new FormData(e.currentTarget);
     const code = (fd.get("code") as string).trim().toUpperCase();
     const discount_percentage = parseInt(fd.get("discount_percentage") as string, 10);
-    const max_uses_raw = fd.get("max_uses") as string;
-    const max_uses = unlimited ? null : parseInt(max_uses_raw, 10) || null;
+    const max_uses = unlimited ? null : parseInt(fd.get("max_uses") as string, 10) || null;
     const expires_raw = fd.get("expires_at") as string;
     const expires_at = expires_raw ? new Date(expires_raw).toISOString() : null;
 
@@ -629,17 +725,8 @@ function CouponsTab({
     startTransition(async () => {
       const res = await createCoupon({ code, discount_percentage, max_uses, expires_at });
       if (res.ok) {
-        // optimistic
         onCouponsChange([
-          {
-            id: crypto.randomUUID(),
-            code,
-            discount_percentage,
-            max_uses,
-            current_uses: 0,
-            expires_at,
-            active: true,
-          } as Coupon,
+          { id: crypto.randomUUID(), code, discount_percentage, max_uses, current_uses: 0, expires_at, active: true } as Coupon,
           ...coupons,
         ]);
         setShowForm(false);
@@ -655,13 +742,14 @@ function CouponsTab({
     startTransition(async () => {
       const res = await toggleCoupon(coupon.id, !coupon.active);
       if (res.ok) {
-        onCouponsChange(
-          coupons.map((c) => c.id === coupon.id ? { ...c, active: !c.active } : c)
-        );
+        onCouponsChange(coupons.map((c) => c.id === coupon.id ? { ...c, active: !c.active } : c));
       }
       setTogglingId(null);
     });
   }
+
+  const inputCls =
+    "w-full bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50";
 
   return (
     <div className="space-y-4">
@@ -683,32 +771,17 @@ function CouponsTab({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Código</label>
-                <input
-                  name="code"
-                  required
-                  placeholder="EX: PROMO50"
-                  className="w-full bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50 font-mono uppercase tracking-widest"
-                />
+                <input name="code" required placeholder="EX: PROMO50" className={`${inputCls} font-mono uppercase tracking-widest`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Desconto (%)</label>
-                <input
-                  name="discount_percentage"
-                  type="number"
-                  min="1"
-                  max="100"
-                  required
-                  placeholder="Ex: 20"
-                  className="w-full bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50"
-                />
+                <input name="discount_percentage" type="number" min="1" max="100" required placeholder="Ex: 20" className={inputCls} />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
-                  Limite de usos
-                </label>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Limite de usos</label>
                 <div className="flex items-center gap-3 mb-2">
                   <button
                     type="button"
@@ -719,41 +792,21 @@ function CouponsTab({
                   </button>
                   <span className="text-xs text-zinc-400">{unlimited ? "Ilimitado" : "Definir limite"}</span>
                 </div>
-                {!unlimited && (
-                  <input
-                    name="max_uses"
-                    type="number"
-                    min="1"
-                    placeholder="Ex: 50"
-                    className="w-full bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50"
-                  />
-                )}
+                {!unlimited && <input name="max_uses" type="number" min="1" placeholder="Ex: 50" className={inputCls} />}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Validade (opcional)</label>
-                <input
-                  name="expires_at"
-                  type="date"
-                  className="w-full bg-surface-2 border border-white/8 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-primary/50"
-                />
+                <input name="expires_at" type="date" className={inputCls} />
               </div>
             </div>
 
             {error && <p className="text-xs text-danger">{error}</p>}
 
             <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={isPending}
-                className="px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50"
-              >
+              <button type="submit" disabled={isPending} className="px-5 py-2.5 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50">
                 {isPending ? "Criando..." : "Criar Cupom"}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-5 py-2.5 rounded-xl bg-surface-2 text-zinc-400 text-sm font-semibold hover:text-white"
-              >
+              <button type="button" onClick={() => setShowForm(false)} className="px-5 py-2.5 rounded-xl bg-surface-2 text-zinc-400 text-sm font-semibold hover:text-white">
                 Cancelar
               </button>
             </div>
@@ -761,7 +814,6 @@ function CouponsTab({
         </div>
       )}
 
-      {/* Coupons table */}
       <div className="bg-surface-1 border border-white/5 rounded-2xl overflow-hidden">
         {coupons.length === 0 ? (
           <div className="p-12 text-center">
@@ -800,8 +852,7 @@ function CouponsTab({
                     </td>
                     <td className="px-4 py-3.5 hidden sm:table-cell">
                       <span className="text-xs text-zinc-400 tabular-nums">
-                        {coupon.current_uses}
-                        {coupon.max_uses !== null ? ` / ${coupon.max_uses}` : " / ∞"}
+                        {coupon.current_uses}{coupon.max_uses !== null ? ` / ${coupon.max_uses}` : " / ∞"}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 hidden md:table-cell">
@@ -821,10 +872,7 @@ function CouponsTab({
                         title={coupon.active ? "Desativar" : "Ativar"}
                         className="p-1.5 rounded-lg text-zinc-500 hover:text-white transition-colors disabled:opacity-40"
                       >
-                        {coupon.active
-                          ? <NoSymbolIcon className="w-4 h-4" />
-                          : <CheckCircleIcon className="w-4 h-4" />
-                        }
+                        {coupon.active ? <NoSymbolIcon className="w-4 h-4" /> : <CheckCircleIcon className="w-4 h-4" />}
                       </button>
                     </td>
                   </tr>

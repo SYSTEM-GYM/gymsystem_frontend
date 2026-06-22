@@ -13,6 +13,9 @@ export type WorkoutExerciseInput = {
   sort_order: number;
   default_sets: number;
   default_reps: number;
+  default_weight_kg?: number | null;
+  rest_seconds?: number;
+  notes?: string | null;
 };
 
 export async function createWorkout(input: {
@@ -73,6 +76,9 @@ export async function createWorkout(input: {
     sort_order: ex.sort_order,
     default_sets: ex.default_sets,
     default_reps: ex.default_reps,
+    default_weight_kg: ex.default_weight_kg ?? null,
+    rest_seconds: ex.rest_seconds ?? 60,
+    notes: ex.notes ?? null,
   }));
 
   const { error: exError } = await admin.from("collection_exercises").insert(rows);

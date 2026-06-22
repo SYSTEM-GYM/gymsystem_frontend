@@ -11,6 +11,7 @@ export type ActionResult = { ok: true } | { ok: false; message: string };
 export type GymPlan = {
   id: string;
   name: string;
+  description: string | null;
   price: number;
   billing_cycle: "monthly" | "quarterly" | "yearly";
   active: boolean;
@@ -155,13 +156,14 @@ export async function getPlans(): Promise<GymPlan[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("gym_plans")
-    .select("id, name, price, billing_cycle, active")
+    .select("id, name, description, price, billing_cycle, active")
     .order("price", { ascending: true });
   return (data ?? []) as GymPlan[];
 }
 
 export async function createPlan(input: {
   name: string;
+  description?: string | null;
   price: number;
   billing_cycle: "monthly" | "quarterly" | "yearly";
 }): Promise<ActionResult> {
@@ -171,6 +173,7 @@ export async function createPlan(input: {
   const admin = createAdminClient();
   const { error } = await admin.from("gym_plans").insert({
     name: input.name.trim(),
+    description: input.description?.trim() || null,
     price: input.price,
     billing_cycle: input.billing_cycle,
   });
@@ -180,6 +183,38 @@ export async function createPlan(input: {
     return { ok: false, message: "Erro ao criar plano." };
   }
 
+  revalidatePath("/dashboard/finance/plans");
+  revalidatePath("/dashboard/finance/subscriptions");
+  return { ok: true };
+}
+
+export async function updatePlan(input: {
+  id: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  billing_cycle: "monthly" | "quarterly" | "yearly";
+}): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("gym_plans")
+    .update({
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+      price: input.price,
+      billing_cycle: input.billing_cycle,
+    })
+    .eq("id", input.id);
+
+  if (error) {
+    console.error("updatePlan error:", error);
+    return { ok: false, message: "Erro ao atualizar plano." };
+  }
+
+  revalidatePath("/dashboard/finance/plans");
   revalidatePath("/dashboard/finance/subscriptions");
   return { ok: true };
 }
