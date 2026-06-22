@@ -19,8 +19,8 @@ export type PhysicalAssessment = {
 
 export type OccupancyLog = {
   id: string;
-  entered_at: string;
-  exited_at: string | null;
+  validated_at: string;
+  event_type: string;
 };
 
 export type StudentDetail = {
@@ -112,9 +112,9 @@ export default async function MemberProfilePage({
 
   const { data: logs } = await admin
     .from("occupancy_logs")
-    .select("id, entered_at, exited_at")
+    .select("id, validated_at, event_type")
     .eq("user_id", id)
-    .order("entered_at", { ascending: false })
+    .order("validated_at", { ascending: false })
     .limit(60)
     .returns<OccupancyLog[]>();
 

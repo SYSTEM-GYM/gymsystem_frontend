@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -38,12 +38,12 @@ function initSets(
 
 function useElapsedTimer(startedAt: Date) {
   const [elapsed, setElapsed] = useState(0);
-  const ref = useRef<ReturnType<typeof setInterval> | null>(null);
-  if (!ref.current) {
-    ref.current = setInterval(() => {
+  useEffect(() => {
+    const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt.getTime()) / 1000));
     }, 1000);
-  }
+    return () => clearInterval(id);
+  }, [startedAt]);
   return elapsed;
 }
 

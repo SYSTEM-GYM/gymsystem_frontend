@@ -635,9 +635,8 @@ function TabAssessments({
 // ── Tab: Frequência ───────────────────────────────────────────────────────────
 
 function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
-  // Group logs by date to build a simple calendar-style heatmap
   const byDate = logs.reduce<Record<string, number>>((acc, log) => {
-    const d = log.entered_at.split("T")[0];
+    const d = log.validated_at.split("T")[0];
     acc[d] = (acc[d] ?? 0) + 1;
     return acc;
   }, {});
@@ -659,9 +658,9 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
           <p className="text-2xl font-bold text-white mt-1 tabular-nums">{logs.length}</p>
         </div>
         <div className="bg-surface-2 rounded-2xl px-4 py-4 col-span-2 sm:col-span-1">
-          <p className="text-xs text-zinc-500">Último treino</p>
+          <p className="text-xs text-zinc-500">Último acesso</p>
           <p className="text-sm font-bold text-white mt-1">
-            {logs[0] ? formatDate(logs[0].entered_at) : "—"}
+            {logs[0] ? formatDate(logs[0].validated_at) : "—"}
           </p>
         </div>
       </div>
@@ -678,35 +677,20 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {logs.slice(0, 30).map((log) => {
-              const durationMs = log.exited_at
-                ? new Date(log.exited_at).getTime() - new Date(log.entered_at).getTime()
-                : null;
-              const durationMin = durationMs ? Math.round(durationMs / 60000) : null;
-              return (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between px-4 py-3 bg-surface-2 rounded-2xl border border-white/5"
-                >
-                  <div className="flex items-center gap-3">
-                    <CalendarDaysIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm text-white font-medium">{formatDatetime(log.entered_at)}</p>
-                      {log.exited_at && (
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          Saída: {formatDatetime(log.exited_at)}
-                        </p>
-                      )}
-                    </div>
+            {logs.slice(0, 30).map((log) => (
+              <div
+                key={log.id}
+                className="flex items-center justify-between px-4 py-3 bg-surface-2 rounded-2xl border border-white/5"
+              >
+                <div className="flex items-center gap-3">
+                  <CalendarDaysIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-white font-medium">{formatDatetime(log.validated_at)}</p>
+                    <p className="text-xs text-zinc-600 mt-0.5 capitalize">{log.event_type}</p>
                   </div>
-                  {durationMin !== null && (
-                    <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full tabular-nums">
-                      {durationMin} min
-                    </span>
-                  )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

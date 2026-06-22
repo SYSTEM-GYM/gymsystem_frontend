@@ -64,18 +64,6 @@ function extractYoutubeId(url: string | null): string | null {
 function ExerciseThumbnail({ exercise }: { exercise: ExerciseOption }) {
   const ytId = extractYoutubeId(exercise.youtube_url);
 
-  if (exercise.video_url) {
-    return (
-      <video
-        src={exercise.video_url}
-        muted
-        autoPlay
-        loop
-        playsInline
-        className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-900"
-      />
-    );
-  }
   if (ytId) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
