@@ -18,6 +18,8 @@ import {
   PlusIcon,
   ArrowPathIcon,
   ChevronDownIcon,
+  LinkIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { CheckIcon as CheckSolidIcon } from "@heroicons/react/24/solid";
 import type {
@@ -26,16 +28,29 @@ import type {
   WaTemplate,
   WaAutomation,
   BroadcastGroup,
+  WaIntegrationPublic,
 } from "./actions";
 import {
+  getContacts,
   getMessages,
   markMessagesRead,
   sendMessage,
+  deleteMessage,
+  clearChat,
   toggleAutomation,
   setAutomationTemplate,
   upsertTemplate,
   sendBroadcast,
+  connectWhatsApp,
+  disconnectWhatsApp,
+  syncContactsFromStudents,
+  syncContactsFromWhatsApp,
+  importContacts,
+  addContact,
+  getBroadcastContactCount,
+  getIntegration,
 } from "./actions";
+import { useWaInboxRealtime } from "@/lib/whatsapp/use-wa-realtime";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,6 +70,29 @@ function fmtDate(iso: string) {
 
 function contactLabel(c: WaContact) {
   return c.student_name ?? c.name ?? c.phone;
+}
+
+function upsertMessageList(prev: WaMessage[], next: WaMessage): WaMessage[] {
+  const byId = prev.findIndex((m) => m.id === next.id);
+  if (byId >= 0) {
+    const copy = [...prev];
+    copy[byId] = next;
+    return copy;
+  }
+  const optIdx = prev.findIndex(
+    (m) =>
+      m.id.startsWith("opt-") &&
+      m.direction === next.direction &&
+      m.content === next.content,
+  );
+  if (optIdx >= 0) {
+    const copy = [...prev];
+    copy[optIdx] = next;
+    return copy;
+  }
+  return [...prev, next].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
 }
 
 const STATUS_ICON: Record<string, string> = {
@@ -97,7 +135,7 @@ const GROUP_LABELS: Record<BroadcastGroup, string> = {
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
-type Tab = "inbox" | "automations" | "broadcast";
+type Tab = "inbox" | "automations" | "broadcast" | "connection";
 
 // ── Root component ────────────────────────────────────────────────────────────
 
@@ -105,17 +143,47 @@ type Props = {
   initialContacts: WaContact[];
   initialTemplates: WaTemplate[];
   initialAutomations: WaAutomation[];
+  initialIntegration: WaIntegrationPublic;
 };
 
 export function WhatsAppClient({
   initialContacts,
   initialTemplates,
   initialAutomations,
+  initialIntegration,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("inbox");
-  const [contacts] = useState(initialContacts);
+  const [tab, setTab] = useState<Tab>(
+    initialIntegration.connected ? "inbox" : "connection",
+  );
+  const [contacts, setContacts] = useState(initialContacts);
+  const [integration, setIntegration] = useState(initialIntegration);
+
+  const refreshContacts = useCallback(async () => {
+    const fresh = await getContacts();
+    setContacts(fresh);
+  }, []);
+
+  // Sincroniza status da conexão (restaura sessão salva sem clicar em QR)
+  useEffect(() => {
+    let active = true;
+    const sync = async () => {
+      const status = await getIntegration();
+      if (active) setIntegration(status);
+    };
+    void sync();
+    const interval = setInterval(sync, integration.connected ? 12000 : 2500);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [integration.connected]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    {
+      id: "connection",
+      label: "Conexão",
+      icon: <LinkIcon className="w-4 h-4" />,
+    },
     {
       id: "inbox",
       label: "Caixa de Entrada",
@@ -134,7 +202,58 @@ export function WhatsAppClient({
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] min-h-[600px]">
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-[#25D366]/10 flex items-center justify-center flex-shrink-0">
+          <ChatBubbleLeftEllipsisIcon className="w-5 h-5 text-[#25D366]" />
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold text-[#25D366] uppercase tracking-widest">
+            Marketing
+          </p>
+          <h1 className="text-xl font-black text-white leading-tight">
+            WhatsApp CRM
+          </h1>
+        </div>
+        <div
+          className={`ml-auto flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
+            integration.connected
+              ? "bg-[#25D366]/10 border-[#25D366]/20"
+              : integration.status === "connecting"
+                ? "bg-blue-500/10 border-blue-500/20"
+                : "bg-amber-500/10 border-amber-500/20"
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              integration.connected
+                ? "bg-[#25D366] animate-pulse"
+                : integration.status === "connecting"
+                  ? "bg-blue-400 animate-pulse"
+                  : "bg-amber-500"
+            }`}
+          />
+          <span
+            className={`text-xs font-semibold ${
+              integration.connected
+                ? "text-[#25D366]"
+                : integration.status === "connecting"
+                  ? "text-blue-400"
+                  : "text-amber-400"
+            }`}
+          >
+            {integration.connected
+              ? integration.display_phone ?? "Conectado"
+              : integration.status === "connecting"
+                ? "Reconectando..."
+                : integration.status === "qr_pending"
+                  ? "Aguardando QR Code"
+                  : "Não conectado"}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col h-[calc(100vh-200px)] min-h-[600px]">
       {/* Tab bar */}
       <div className="flex gap-1 mb-4 bg-surface-1 border border-white/5 rounded-2xl p-1 w-fit">
         {tabs.map((t) => (
@@ -153,7 +272,13 @@ export function WhatsAppClient({
         ))}
       </div>
 
-      {tab === "inbox" && <InboxPane contacts={contacts} />}
+      {tab === "inbox" && (
+        <InboxPane
+          contacts={contacts}
+          integration={integration}
+          onContactsRefresh={refreshContacts}
+        />
+      )}
       {tab === "automations" && (
         <AutomationsTab
           automations={initialAutomations}
@@ -161,23 +286,118 @@ export function WhatsAppClient({
         />
       )}
       {tab === "broadcast" && (
-        <BroadcastTab templates={initialTemplates} />
+        <BroadcastTab templates={initialTemplates} contactCount={contacts.length} />
       )}
+      {tab === "connection" && (
+        <ConnectionTab
+          integration={integration}
+          onIntegrationChange={setIntegration}
+          onContactsImported={refreshContacts}
+        />
+      )}
+      </div>
     </div>
   );
 }
 
 // ── Inbox Pane ────────────────────────────────────────────────────────────────
 
-function InboxPane({ contacts }: { contacts: WaContact[] }) {
+function InboxPane({
+  contacts,
+  integration,
+  onContactsRefresh,
+}: {
+  contacts: WaContact[];
+  integration: WaIntegrationPublic;
+  onContactsRefresh: () => Promise<void>;
+}) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<WaContact | null>(null);
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [showChat, setShowChat] = useState(false); // mobile: show right pane
+  const prevMsgCountRef = useRef(0);
+  const [showChat, setShowChat] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
+  const loadMessages = useCallback(async (contactId: string) => {
+    setLoadingMsgs(true);
+    const msgs = await getMessages(contactId);
+    setMessages(msgs);
+    setLoadingMsgs(false);
+    await markMessagesRead(contactId);
+    void onContactsRefresh();
+  }, [onContactsRefresh]);
+
+  const handleMessageInsert = useCallback(
+    (msg: WaMessage) => {
+      setMessages((prev) => upsertMessageList(prev, msg));
+      if (msg.direction === "inbound" && selected?.id === msg.contact_id) {
+        void markMessagesRead(msg.contact_id);
+      }
+    },
+    [selected?.id],
+  );
+
+  const handleMessageUpdate = useCallback((msg: WaMessage) => {
+    setMessages((prev) => upsertMessageList(prev, msg));
+  }, []);
+
+  useWaInboxRealtime(
+    selected?.id ?? null,
+    onContactsRefresh,
+    handleMessageInsert,
+    handleMessageUpdate,
+  );
+
+  // Fallback leve se Realtime não estiver habilitado no Supabase
+  useEffect(() => {
+    if (!selected) return;
+    const id = setInterval(async () => {
+      const msgs = await getMessages(selected.id);
+      setMessages((prev) => {
+        const same =
+          prev.length === msgs.length &&
+          prev.every(
+            (m, i) =>
+              m.id === msgs[i]?.id &&
+              m.status === msgs[i]?.status &&
+              m.content === msgs[i]?.content,
+          );
+        return same ? prev : msgs;
+      });
+    }, 8000);
+    return () => clearInterval(id);
+  }, [selected]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      void onContactsRefresh();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [onContactsRefresh]);
+
+  function selectContact(c: WaContact) {
+    setSelected(c);
+    setShowChat(true);
+    void loadMessages(c.id);
+  }
+
+  // Mantém contato selecionado sincronizado com a lista (preview / não lidas)
+  useEffect(() => {
+    if (!selected) return;
+    const updated = contacts.find((c) => c.id === selected.id);
+    if (updated) setSelected(updated);
+  }, [contacts, selected]);
+
+  // Auto-scroll só quando chegam mensagens novas
+  useEffect(() => {
+    if (messages.length > prevMsgCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMsgCountRef.current = messages.length;
+  }, [messages]);
 
   const filtered = contacts.filter((c) => {
     const q = search.toLowerCase();
@@ -188,40 +408,15 @@ function InboxPane({ contacts }: { contacts: WaContact[] }) {
     );
   });
 
-  const loadMessages = useCallback(
-    async (contactId: string, silent = false) => {
-      if (!silent) setLoadingMsgs(true);
-      const msgs = await getMessages(contactId);
-      setMessages(msgs);
-      if (!silent) setLoadingMsgs(false);
-      await markMessagesRead(contactId);
-    },
-    [],
-  );
-
-  function selectContact(c: WaContact) {
-    setSelected(c);
-    setShowChat(true);
-    loadMessages(c.id);
-  }
-
-  // Polling: refresh messages every 5s while a contact is selected
-  useEffect(() => {
-    if (!selected) return;
-    pollRef.current = setInterval(() => {
-      loadMessages(selected.id, true);
-    }, 5000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [selected, loadMessages]);
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   return (
+    <div className="flex flex-col flex-1 gap-3 overflow-hidden">
+      {showImport && (
+        <ImportContactsPanel
+          connected={integration.connected}
+          onClose={() => setShowImport(false)}
+          onImported={onContactsRefresh}
+        />
+      )}
     <div className="flex flex-1 overflow-hidden rounded-2xl border border-white/5 bg-surface-1">
       {/* Left pane: contact list */}
       <div
@@ -229,8 +424,8 @@ function InboxPane({ contacts }: { contacts: WaContact[] }) {
           showChat ? "hidden md:flex" : "flex"
         } flex-col w-full md:w-80 border-r border-white/5 flex-shrink-0`}
       >
-        {/* Search */}
-        <div className="p-3 border-b border-white/5">
+        {/* Search + import */}
+        <div className="p-3 border-b border-white/5 space-y-2">
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
             <input
@@ -241,13 +436,26 @@ function InboxPane({ contacts }: { contacts: WaContact[] }) {
               className="w-full pl-9 pr-3 py-2 text-sm bg-surface-2 border border-white/5 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-primary/30"
             />
           </div>
+          <button
+            onClick={() => setShowImport(true)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold bg-surface-2 border border-white/10 rounded-xl text-zinc-400 hover:text-white hover:border-primary/30 transition-colors"
+          >
+            <PlusIcon className="w-3.5 h-3.5" />
+            Importar contatos
+          </button>
         </div>
 
         {/* Contact rows */}
         <ul className="flex-1 overflow-y-auto">
           {filtered.length === 0 && (
-            <li className="p-6 text-center text-sm text-zinc-600">
-              Nenhum contato encontrado.
+            <li className="p-6 text-center text-sm text-zinc-600 space-y-3">
+              <p>Nenhum contato encontrado.</p>
+              <button
+                onClick={() => setShowImport(true)}
+                className="text-primary font-semibold hover:underline"
+              >
+                Importar contatos agora
+              </button>
             </li>
           )}
           {filtered.map((c) => (
@@ -308,6 +516,13 @@ function InboxPane({ contacts }: { contacts: WaContact[] }) {
             onBack={() => setShowChat(false)}
             onRefresh={() => loadMessages(selected.id)}
             onSent={(msg) => setMessages((prev) => [...prev, msg])}
+            onMessageConfirmed={(msg) =>
+              setMessages((prev) => upsertMessageList(prev, msg))
+            }
+            onMessageDeleted={(id) =>
+              setMessages((prev) => prev.filter((m) => m.id !== id))
+            }
+            onChatCleared={() => setMessages([])}
             startTransition={startTransition}
           />
         ) : (
@@ -319,6 +534,7 @@ function InboxPane({ contacts }: { contacts: WaContact[] }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
@@ -333,6 +549,9 @@ function MessageThread({
   onBack,
   onRefresh,
   onSent,
+  onMessageConfirmed,
+  onMessageDeleted,
+  onChatCleared,
   startTransition,
 }: {
   contact: WaContact;
@@ -342,12 +561,47 @@ function MessageThread({
   onBack: () => void;
   onRefresh: () => void;
   onSent: (msg: WaMessage) => void;
+  onMessageConfirmed: (msg: WaMessage) => void;
+  onMessageDeleted: (id: string) => void;
+  onChatCleared: () => void;
   startTransition: (fn: () => void) => void;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function handleDeleteMessage(messageId: string) {
+    if (messageId.startsWith("opt-")) return;
+    if (!confirm("Apagar esta mensagem?")) return;
+    startTransition(async () => {
+      const res = await deleteMessage(messageId);
+      if (res.ok) onMessageDeleted(messageId);
+      else setErr(res.message);
+    });
+  }
+
+  async function handleClearChat() {
+    setShowMenu(false);
+    if (!confirm("Apagar todas as mensagens desta conversa?")) return;
+    startTransition(async () => {
+      const res = await clearChat(contact.id);
+      if (res.ok) onChatCleared();
+      else setErr(res.message);
+    });
+  }
 
   async function handleSend() {
     if (!text.trim() || sending) return;
@@ -367,9 +621,13 @@ function MessageThread({
     setText("");
     startTransition(async () => {
       const res = await sendMessage(contact.id, optimistic.content);
-      if (!res.ok) setErr(res.message);
+      if (!res.ok) {
+        setErr(res.message);
+        onMessageDeleted(optimistic.id);
+      } else {
+        onMessageConfirmed(res.message);
+      }
       setSending(false);
-      onRefresh();
     });
   }
 
@@ -420,6 +678,25 @@ function MessageThread({
         >
           <ArrowPathIcon className="w-4 h-4" />
         </button>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setShowMenu((v) => !v)}
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-surface-2"
+            title="Opções da conversa"
+          >
+            <TrashIcon className="w-4 h-4" />
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-xl border border-white/10 bg-surface-2 shadow-xl py-1">
+              <button
+                onClick={handleClearChat}
+                className="w-full px-4 py-2 text-left text-sm text-danger hover:bg-white/5"
+              >
+                Limpar conversa
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
@@ -444,7 +721,15 @@ function MessageThread({
               <div className="flex-1 h-px bg-white/5" />
             </div>
             {group.msgs.map((msg) => (
-              <MessageBubble key={msg.id} msg={msg} />
+              <MessageBubble
+                key={msg.id}
+                msg={msg}
+                onDelete={
+                  msg.id.startsWith("opt-")
+                    ? undefined
+                    : () => handleDeleteMessage(msg.id)
+                }
+              />
             ))}
           </div>
         ))}
@@ -480,17 +765,33 @@ function MessageThread({
   );
 }
 
-function MessageBubble({ msg }: { msg: WaMessage }) {
+function MessageBubble({
+  msg,
+  onDelete,
+}: {
+  msg: WaMessage;
+  onDelete?: () => void;
+}) {
   const out = msg.direction === "outbound";
   return (
-    <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-          out
-            ? "bg-primary text-black rounded-br-sm"
-            : "bg-surface-2 text-white rounded-bl-sm"
-        }`}
-      >
+    <div className={`flex group ${out ? "justify-end" : "justify-start"}`}>
+      <div className="flex items-end gap-1 max-w-[80%]">
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-zinc-600 hover:text-danger hover:bg-surface-2 transition-opacity flex-shrink-0"
+            title="Apagar mensagem"
+          >
+            <TrashIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <div
+          className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+            out
+              ? "bg-primary text-black rounded-br-sm"
+              : "bg-surface-2 text-white rounded-bl-sm"
+          }`}
+        >
         <p className="whitespace-pre-wrap break-words">{msg.content}</p>
         <div
           className={`flex items-center justify-end gap-1 mt-1 ${
@@ -508,6 +809,7 @@ function MessageBubble({ msg }: { msg: WaMessage }) {
             </span>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -768,11 +1070,18 @@ function TemplateForm({
 
 // ── Broadcast Tab ─────────────────────────────────────────────────────────────
 
-function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
+function BroadcastTab({
+  templates,
+  contactCount,
+}: {
+  templates: WaTemplate[];
+  contactCount: number;
+}) {
   const [templateId, setTemplateId] = useState("");
-  const [group, setGroup] = useState<BroadcastGroup>("active");
+  const [group, setGroup] = useState<BroadcastGroup>("all");
   const [varValues, setVarValues] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
+  const [groupCount, setGroupCount] = useState<number | null>(null);
   const [result, setResult] = useState<
     | null
     | { ok: true; sent: number }
@@ -786,6 +1095,16 @@ function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
       setVarValues(new Array(selectedTemplate.variables.length).fill(""));
     }
   }, [templateId, selectedTemplate]);
+
+  useEffect(() => {
+    let active = true;
+    void getBroadcastContactCount(group).then((count) => {
+      if (active) setGroupCount(count);
+    });
+    return () => {
+      active = false;
+    };
+  }, [group, contactCount]);
 
   // Live preview
   const preview = selectedTemplate
@@ -813,7 +1132,18 @@ function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
     <div className="flex flex-col gap-6 max-w-2xl">
       <p className="text-sm text-zinc-400">
         Envie uma mensagem em massa para grupos de contatos via WhatsApp.
+        {contactCount === 0 && (
+          <span className="block mt-2 text-amber-400">
+            Nenhum contato cadastrado — importe na aba Conexão ou Caixa de Entrada antes de disparar.
+          </span>
+        )}
       </p>
+
+      {templates.filter((t) => t.active).length === 0 && (
+        <div className="px-4 py-3 rounded-xl text-sm bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          Crie um template na aba Automações antes de fazer disparos.
+        </div>
+      )}
 
       <div className="bg-surface-1 border border-white/5 rounded-2xl p-5 space-y-5">
         {/* Template select */}
@@ -906,6 +1236,13 @@ function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
           </div>
         </div>
 
+        {groupCount !== null && (
+          <p className="text-xs text-zinc-500">
+            <span className="font-semibold text-white">{groupCount}</span>{" "}
+            {groupCount === 1 ? "contato válido" : "contatos válidos"} neste grupo
+          </p>
+        )}
+
         {/* Result */}
         {result && (
           <div
@@ -933,7 +1270,7 @@ function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
         {/* Send button */}
         <button
           onClick={handleSend}
-          disabled={!templateId || sending}
+          disabled={!templateId || sending || groupCount === 0}
           className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-black font-black rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity"
         >
           {sending ? (
@@ -948,6 +1285,456 @@ function BroadcastTab({ templates }: { templates: WaTemplate[] }) {
             </>
           )}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Import Contacts Panel ─────────────────────────────────────────────────────
+
+function parseCsvContacts(text: string): { phone: string; name?: string }[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const sep = lines[0].includes(";") ? ";" : ",";
+  const rows: { phone: string; name?: string }[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(sep).map((p) => p.trim().replace(/^"|"$/g, ""));
+    const lower = parts.join(" ").toLowerCase();
+    if (
+      i === 0 &&
+      (lower.includes("telefone") ||
+        lower.includes("phone") ||
+        lower.includes("nome") ||
+        lower.includes("name"))
+    ) {
+      continue;
+    }
+    if (parts.length >= 2) {
+      rows.push({ name: parts[0], phone: parts[1] });
+    } else if (parts.length === 1) {
+      rows.push({ phone: parts[0] });
+    }
+  }
+
+  return rows;
+}
+
+function ImportContactsPanel({
+  connected,
+  onClose,
+  onImported,
+  embedded,
+}: {
+  connected: boolean;
+  onClose?: () => void;
+  onImported: () => void | Promise<void>;
+  embedded?: boolean;
+}) {
+  const [mode, setMode] = useState<"manual" | "csv">("manual");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [csvText, setCsvText] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function run(
+    label: string,
+    fn: () => Promise<{ ok: boolean; message?: string; imported?: number; skipped?: number }>,
+  ) {
+    setBusy(label);
+    setMsg(null);
+    const res = await fn();
+    setBusy(null);
+    if (!res.ok) {
+      setMsg({ type: "err", text: res.message ?? "Erro ao importar." });
+      return;
+    }
+    const extra =
+      res.skipped && res.skipped > 0
+        ? ` (${res.skipped} ignorado(s) por telefone inválido)`
+        : "";
+    setMsg({
+      type: "ok",
+      text: `${res.imported ?? 0} contato(s) importado(s)${extra}.`,
+    });
+    await onImported();
+  }
+
+  return (
+    <div
+      className={
+        embedded
+          ? "space-y-4"
+          : "bg-surface-1 border border-primary/20 rounded-2xl p-5 space-y-4"
+      }
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-white">Importar contatos</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Alunos, conversas do WhatsApp, CSV ou cadastro manual.
+          </p>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="text-zinc-500 hover:text-white">
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          disabled={!!busy}
+          onClick={() =>
+            run("alunos", async () => {
+              const res = await syncContactsFromStudents();
+              return res.ok
+                ? { ok: true, imported: res.imported }
+                : { ok: false, message: res.message };
+            })
+          }
+          className="px-4 py-2 text-xs font-semibold bg-surface-2 border border-white/10 rounded-xl text-white hover:border-primary/30 disabled:opacity-40"
+        >
+          {busy === "alunos" ? "Importando…" : "Dos alunos cadastrados"}
+        </button>
+        <button
+          disabled={!!busy || !connected}
+          onClick={() =>
+            run("wa", async () => {
+              const res = await syncContactsFromWhatsApp();
+              return res.ok
+                ? { ok: true, imported: res.imported }
+                : { ok: false, message: res.message };
+            })
+          }
+          className="px-4 py-2 text-xs font-semibold bg-surface-2 border border-white/10 rounded-xl text-white hover:border-primary/30 disabled:opacity-40"
+          title={connected ? undefined : "Conecte o WhatsApp primeiro"}
+        >
+          {busy === "wa" ? "Sincronizando…" : "Das conversas do WhatsApp"}
+        </button>
+      </div>
+
+      <div className="flex gap-1 bg-surface-2 border border-white/5 rounded-xl p-1 w-fit">
+        {(["manual", "csv"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              mode === m ? "bg-primary text-black" : "text-zinc-500 hover:text-white"
+            }`}
+          >
+            {m === "manual" ? "Manual" : "CSV / Arquivo"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "manual" ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] text-zinc-500 uppercase">Nome</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="João Silva"
+              className="w-full px-3 py-2 text-sm bg-surface-2 border border-white/5 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-primary/30"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-zinc-500 uppercase">Telefone</label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="11999999999"
+              className="w-full px-3 py-2 text-sm bg-surface-2 border border-white/5 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-primary/30"
+            />
+          </div>
+          <button
+            disabled={!!busy || !phone.trim()}
+            onClick={() =>
+              run("manual", async () => {
+                const res = await addContact({ phone, name: name || undefined });
+                if (!res.ok) return { ok: false, message: res.message };
+                setName("");
+                setPhone("");
+                return { ok: true, imported: 1 };
+              })
+            }
+            className="col-span-2 py-2.5 bg-primary text-black text-sm font-black rounded-xl disabled:opacity-40"
+          >
+            {busy === "manual" ? "Salvando…" : "Adicionar contato"}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => setCsvText(String(reader.result ?? ""));
+              reader.readAsText(file);
+            }}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="px-4 py-2 text-xs font-semibold bg-surface-2 border border-white/10 rounded-xl text-white hover:border-primary/30"
+            >
+              Escolher arquivo
+            </button>
+            <span className="text-xs text-zinc-600 self-center">
+              Formato: nome, telefone (uma linha por contato)
+            </span>
+          </div>
+          <textarea
+            value={csvText}
+            onChange={(e) => setCsvText(e.target.value)}
+            rows={5}
+            placeholder={`nome,telefone\nJoão Silva,11999999999\nMaria,21988887777`}
+            className="w-full px-3 py-2.5 text-sm bg-surface-2 border border-white/5 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-primary/30 resize-none font-mono"
+          />
+          <button
+            disabled={!!busy || !csvText.trim()}
+            onClick={() =>
+              run("csv", async () => {
+                const rows = parseCsvContacts(csvText);
+                const res = await importContacts(rows);
+                if (!res.ok) return { ok: false, message: res.message };
+                setCsvText("");
+                return {
+                  ok: true,
+                  imported: res.imported,
+                  skipped: res.skipped,
+                };
+              })
+            }
+            className="w-full py-2.5 bg-primary text-black text-sm font-black rounded-xl disabled:opacity-40"
+          >
+            {busy === "csv" ? "Importando…" : "Importar do CSV"}
+          </button>
+        </div>
+      )}
+
+      {msg && (
+        <div
+          className={`px-4 py-3 rounded-xl text-sm font-semibold ${
+            msg.type === "ok"
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "bg-danger/10 text-danger border border-danger/20"
+          }`}
+        >
+          {msg.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Connection Tab ────────────────────────────────────────────────────────────
+
+function ConnectionTab({
+  integration,
+  onIntegrationChange,
+  onContactsImported,
+}: {
+  integration: WaIntegrationPublic;
+  onIntegrationChange: (i: WaIntegrationPublic) => void;
+  onContactsImported: () => void;
+}) {
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (
+      integration.status !== "qr_pending" &&
+      integration.status !== "connecting" &&
+      integration.connected
+    ) {
+      return;
+    }
+
+    const poll = setInterval(async () => {
+      const status = await getIntegration();
+      onIntegrationChange(status);
+    }, 2000);
+
+    return () => clearInterval(poll);
+  }, [integration.status, integration.connected, onIntegrationChange]);
+
+  async function handleConnect() {
+    setConnecting(true);
+    setMsg(null);
+    const res = await connectWhatsApp();
+    setConnecting(false);
+    if ("ok" in res && res.ok === false) {
+      setMsg({ type: "err", text: res.message });
+      return;
+    }
+    if ("status" in res) {
+      onIntegrationChange(res);
+      setMsg({
+        type: "ok",
+        text:
+          res.status === "connected"
+            ? "WhatsApp conectado!"
+            : "Escaneie o QR Code com seu celular.",
+      });
+    }
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    setMsg(null);
+    const res = await disconnectWhatsApp();
+    setDisconnecting(false);
+    if ("ok" in res && res.ok === false) {
+      setMsg({ type: "err", text: res.message });
+      return;
+    }
+    if ("status" in res) {
+      onIntegrationChange(res);
+      setMsg({ type: "ok", text: "WhatsApp desconectado." });
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6 max-w-2xl">
+      <div className="bg-surface-1 border border-white/5 rounded-2xl p-5 space-y-5">
+        <div>
+          <p className="text-sm font-bold text-white">Conectar WhatsApp</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            Conexão via{" "}
+            <a
+              href="https://wwebjs.dev/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              whatsapp-web.js
+            </a>
+            {" "}— igual ao WhatsApp Web. Escaneie o QR Code com o app no celular.
+          </p>
+        </div>
+
+        <div
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+            integration.connected
+              ? "bg-[#25D366]/10 border-[#25D366]/20"
+              : "bg-amber-500/10 border-amber-500/20"
+          }`}
+        >
+          <span
+            className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+              integration.connected
+                ? "bg-[#25D366] animate-pulse"
+                : "bg-amber-500"
+            }`}
+          />
+          <div>
+            <p
+              className={`text-sm font-bold ${
+                integration.connected ? "text-[#25D366]" : "text-amber-400"
+              }`}
+            >
+              {integration.connected
+                ? "Conectado"
+                : integration.status === "qr_pending"
+                  ? "Aguardando leitura do QR Code"
+                  : integration.status === "connecting"
+                    ? "Conectando…"
+                    : "Desconectado"}
+            </p>
+            {integration.display_phone && (
+              <p className="text-xs text-zinc-500">{integration.display_phone}</p>
+            )}
+          </div>
+        </div>
+
+        {integration.qr_code && !integration.connected && (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="p-4 bg-white rounded-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={integration.qr_code}
+                alt="QR Code WhatsApp"
+                width={256}
+                height={256}
+                className="w-64 h-64"
+              />
+            </div>
+            <p className="text-xs text-zinc-500 text-center max-w-xs">
+              Abra o WhatsApp no celular → Dispositivos conectados → Conectar dispositivo
+            </p>
+          </div>
+        )}
+
+        {msg && (
+          <div
+            className={`px-4 py-3 rounded-xl text-sm font-semibold ${
+              msg.type === "ok"
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "bg-danger/10 text-danger border border-danger/20"
+            }`}
+          >
+            {msg.text}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {!integration.connected ? (
+            <button
+              onClick={handleConnect}
+              disabled={connecting || integration.status === "connecting"}
+              className="px-5 py-2.5 bg-[#25D366] text-black text-sm font-black rounded-xl disabled:opacity-40 hover:opacity-90"
+            >
+              {connecting || integration.status === "connecting"
+                ? "Iniciando…"
+                : integration.status === "qr_pending"
+                  ? "Gerar novo QR Code"
+                  : "Conectar WhatsApp"}
+            </button>
+          ) : (
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="px-5 py-2.5 bg-danger/20 border border-danger/30 text-danger text-sm font-semibold rounded-xl hover:bg-danger/30 disabled:opacity-40"
+            >
+              {disconnecting ? "Desconectando…" : "Desconectar"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <ImportContactsPanel
+        embedded
+        connected={integration.connected}
+        onImported={onContactsImported}
+      />
+
+      <div className="bg-surface-1 border border-white/5 rounded-2xl p-5 space-y-3">
+        <p className="text-sm font-bold text-white">Como funciona</p>
+        <ol className="text-xs text-zinc-500 space-y-2 list-decimal list-inside">
+          <li>Certifique-se de que o backend está rodando (<code className="text-zinc-400">npm run start:dev</code> na pasta backend).</li>
+          <li>Clique em &quot;Conectar WhatsApp&quot; e escaneie o QR Code.</li>
+          <li>Importe contatos (alunos, conversas do WhatsApp ou CSV).</li>
+          <li>Use a Caixa de Entrada para conversar — mensagens enviadas pelo celular também aparecem aqui.</li>
+          <li>Use Disparos para mensagens em massa com templates.</li>
+        </ol>
+        <p className="text-[10px] text-zinc-600 pt-1">
+          A sessão fica salva no servidor. Se o backend reiniciar, pode ser necessário escanear o QR novamente.
+        </p>
       </div>
     </div>
   );
