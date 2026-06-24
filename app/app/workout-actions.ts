@@ -52,10 +52,11 @@ export type SaveWorkoutLogResult =
   | { ok: false; message: string };
 
 function streakMultiplier(streak: number): number {
-  if (streak >= 60) return 5;
-  if (streak >= 30) return 3;
-  if (streak >= 10) return 2;
-  if (streak >= 5) return 1.5;
+  if (streak >= 60) return 4;
+  if (streak >= 30) return 2.5;
+  if (streak >= 14) return 1.75;
+  if (streak >= 7) return 1.4;
+  if (streak >= 3) return 1.15;
   return 1;
 }
 
@@ -91,15 +92,27 @@ async function updateStreakAndXP(
   if (!lastDate || lastDate === yesterdayStr) {
     // Consecutive day (or first-ever workout)
     newStreak = currentStreak + 1;
-    xpDelta = Math.round(50 * streakMultiplier(newStreak));
+    xpDelta = Math.round(40 * streakMultiplier(newStreak));
   } else {
-    // Streak broken
-    const penalty =
-      lastDate < yesterdayStr && currentStreak >= 5
-        ? Math.round(currentXP * 0.1)
-        : 0;
-    newStreak = 1;
-    xpDelta = 50 - penalty;
+    // Streak is breaking — check for an approved squad rescue for yesterday
+    const { data: rescue } = await supabase
+      .from("squad_streak_rescues")
+      .select("id")
+      .eq("student_id", userId)
+      .eq("missed_date", yesterdayStr)
+      .eq("status", "approved")
+      .maybeSingle();
+
+    if (rescue) {
+      // Rescue active: maintain streak, skip penalty, award base XP
+      newStreak = currentStreak + 1;
+      xpDelta = Math.round(40 * streakMultiplier(newStreak));
+    } else {
+      // Genuine break — flat penalty, not percentage-based
+      const penalty = currentStreak >= 3 ? Math.min(150, Math.round(currentXP * 0.04)) : 0;
+      newStreak = 1;
+      xpDelta = 40 - penalty;
+    }
   }
 
   const newXP = Math.max(0, currentXP + xpDelta);

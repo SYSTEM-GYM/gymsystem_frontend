@@ -56,6 +56,12 @@ export function ExerciseList({ exercises }: Props) {
 
   const hasVideo = (e: Exercise) => !!(e.youtube_url || e.webm_path || e.video_url);
 
+  function extractYtId(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const m = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return m?.[1] ?? null;
+  }
+
   return (
     <>
       <div className="relative mb-4">
@@ -76,44 +82,63 @@ export function ExerciseList({ exercises }: Props) {
           </p>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {visible.map((exercise) => (
-            <li
-              key={exercise.id}
-              onClick={() => hasVideo(exercise) && setActive(exercise)}
-              className={`flex items-center gap-4 p-4 bg-surface-1 border border-white/5 rounded-2xl transition-colors ${
-                hasVideo(exercise) ? "cursor-pointer hover:border-primary/20 hover:bg-surface-1/80" : ""
-              }`}
-            >
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  hasVideo(exercise) ? "bg-primary/10" : "bg-surface-2"
+        <ul className="space-y-3">
+          {visible.map((exercise) => {
+            const ytId = extractYtId(exercise.youtube_url);
+            const clickable = hasVideo(exercise);
+            const displayName = exercise.translated_name || exercise.title;
+            return (
+              <li
+                key={exercise.id}
+                onClick={() => clickable && setActive(exercise)}
+                className={`flex items-stretch bg-surface-1 border border-white/5 rounded-2xl overflow-hidden transition-colors ${
+                  clickable ? "cursor-pointer hover:border-primary/20 active:scale-[0.99]" : ""
                 }`}
               >
-                <PlayCircleIcon
-                  className={`w-5 h-5 ${hasVideo(exercise) ? "text-primary" : "text-zinc-600"}`}
-                />
-              </div>
+                {/* Thumbnail — strictly left, fixed size */}
+                <div className="w-24 h-24 flex-shrink-0 relative bg-zinc-800">
+                  {ytId ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
+                      alt={displayName}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                      <PlayCircleIcon className="w-9 h-9 text-zinc-600" />
+                    </div>
+                  )}
+                  {/* Play overlay for video items */}
+                  {clickable && ytId && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity">
+                      <PlayCircleIcon className="w-8 h-8 text-white drop-shadow-lg" />
+                    </div>
+                  )}
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white leading-tight">
-                  {exercise.translated_name || exercise.title}
-                </p>
-                {exercise.description && (
-                  <p className="text-xs text-zinc-500 mt-0.5 truncate">{exercise.description}</p>
-                )}
-              </div>
-
-              {hasVideo(exercise) && (
-                <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary pointer-events-none">
-                  Ver Vídeo
-                </span>
-              )}
-            </li>
-          ))}
+                {/* Info — right side, left-aligned text */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center py-3 px-4">
+                  <p className="text-sm font-bold text-white leading-tight text-left">
+                    {displayName}
+                  </p>
+                  {exercise.description && (
+                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2 text-left">
+                      {exercise.description}
+                    </p>
+                  )}
+                  {clickable && (
+                    <span className="inline-block self-start mt-2 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
+                      Ver Vídeo
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
 
           {hasMore && (
-            <li ref={sentinelRef} className="space-y-2" aria-hidden="true">
+            <li ref={sentinelRef} className="space-y-3" aria-hidden="true">
               <ExerciseRowSkeleton />
               <ExerciseRowSkeleton />
             </li>

@@ -12,17 +12,28 @@ export default async function StudentProfilePage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("first_name, last_name, full_name, photo_url, plan_type, email, phone, created_at")
+    .select("first_name, last_name, full_name, photo_url, plan_type, email, phone, created_at, home_gym_id")
     .eq("id", user.id)
     .single();
 
   const planLabels: Record<string, string> = { basic: "Básico", premium: "Premium", vip: "VIP" };
   const plan = planLabels[profile?.plan_type ?? ""] ?? (profile?.plan_type ?? "—");
 
+  let gymName: string | null = null;
+  if (profile?.home_gym_id) {
+    const { data: gym } = await supabase
+      .from("gyms")
+      .select("name")
+      .eq("id", profile.home_gym_id)
+      .single();
+    gymName = gym?.name ?? null;
+  }
+
   const infoRows = [
     { label: "E-mail",      value: user.email ?? "—" },
     { label: "Telefone",    value: profile?.phone ?? "—" },
     { label: "Plano",       value: plan },
+    ...(gymName ? [{ label: "Filial",  value: gymName }] : []),
     { label: "Membro desde", value: profile?.created_at
         ? new Date(profile.created_at).toLocaleDateString("pt-BR")
         : "—" },

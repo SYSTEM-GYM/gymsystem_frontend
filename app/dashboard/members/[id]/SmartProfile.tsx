@@ -748,10 +748,12 @@ const MUSCLE_GROUP_LABELS: Record<string, string> = {
   full_body: "Corpo Inteiro",
 };
 
-function ExerciseSearchPopover({
+function ExerciseSearchModal({
+  open,
   onSelect,
   onClose,
 }: {
+  open: boolean;
   onSelect: (ex: ExerciseSearchResult) => void;
   onClose: () => void;
 }) {
@@ -761,14 +763,15 @@ function ExerciseSearchPopover({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (open) {
+      setQuery("");
+      setResults([]);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
 
   useEffect(() => {
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (query.length < 2) { setResults([]); return; }
     const t = setTimeout(() => {
       startSearch(async () => {
         const res = await searchExercises(query);
@@ -778,100 +781,111 @@ function ExerciseSearchPopover({
     return () => clearTimeout(t);
   }, [query]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
   const showSpinner = isPending && query.length >= 2;
   const showEmpty   = !isPending && query.length >= 2 && results.length === 0;
 
   return (
-    /* Wrapper — NOT inside overflow-hidden, so dropdown renders freely */
-    <div className="space-y-2">
-      {/* Input row */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <input
-            ref={inputRef}
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar exercício (ex: supino, agachamento, peito...)"
-            className="w-full bg-zinc-900 border border-white/15 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-          />
-          {showSpinner && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">
-              ···
-            </span>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl flex flex-col max-h-[80vh]">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/8 flex-shrink-0">
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar exercício (ex: supino, agachamento, peito...)"
+              className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+            />
+            {showSpinner && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">···</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-white/8 transition-colors flex-shrink-0"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable results */}
+        <div className="overflow-y-auto flex-1">
+          {results.length > 0 && (
+            <ul className="divide-y divide-white/5">
+              {results.map((ex) => {
+                const ytId = extractYtId(ex.youtube_url);
+                const displayName = ex.translated_name || ex.title;
+                const muscle = ex.muscle_group
+                  ? (MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group)
+                  : null;
+                const originalEn = ex.translated_name ? ex.title : null;
+
+                return (
+                  <li key={ex.id}>
+                    <button
+                      type="button"
+                      onClick={() => { onSelect(ex); onClose(); }}
+                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/[0.05] active:bg-white/10 transition-colors text-left"
+                    >
+                      {ytId ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
+                          alt={displayName}
+                          className="w-24 h-24 object-cover rounded-2xl flex-shrink-0 bg-zinc-800 border border-white/8"
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-white/8 flex items-center justify-center flex-shrink-0">
+                          <FilmIcon className="w-8 h-8 text-zinc-600" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 flex flex-col gap-1">
+                        <p className="text-base font-bold text-white leading-snug">
+                          {displayName}
+                        </p>
+                        <p className="text-sm text-zinc-500">
+                          {[muscle, originalEn].filter(Boolean).join(" · ") || "Exercício"}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {showEmpty && (
+            <div className="flex items-center gap-3 px-5 py-8">
+              <BeakerIcon className="w-5 h-5 text-zinc-600 flex-shrink-0" />
+              <p className="text-sm text-zinc-500">
+                Nenhum exercício encontrado para{" "}
+                <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>.
+              </p>
+            </div>
+          )}
+
+          {!query && (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-zinc-600">Digite para buscar um exercício.</p>
+            </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2.5 rounded-xl bg-zinc-900 border border-white/10 text-zinc-500 hover:text-white transition-colors flex-shrink-0"
-        >
-          <XMarkIcon className="w-4 h-4" />
-        </button>
       </div>
-
-      {/* Results list — renders in normal flow, NOT absolute, so it pushes content down */}
-      {results.length > 0 && (
-        <div className="rounded-2xl border border-white/10 bg-zinc-900 overflow-hidden shadow-2xl">
-          {results.map((ex, idx) => {
-            const ytId = extractYtId(ex.youtube_url);
-            const displayName = ex.translated_name || ex.title;
-            const muscle = ex.muscle_group
-              ? (MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group)
-              : null;
-            const originalEn = ex.translated_name ? ex.title : null;
-
-            return (
-              <button
-                key={ex.id}
-                type="button"
-                onClick={() => onSelect(ex)}
-                className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-white/[0.06] active:bg-white/10 transition-colors text-left ${
-                  idx < results.length - 1 ? "border-b border-white/5" : ""
-                }`}
-              >
-                {/* Thumbnail */}
-                {ytId ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
-                    alt={displayName}
-                    className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-800"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                    <FilmIcon className="w-5 h-5 text-zinc-600" />
-                  </div>
-                )}
-
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white leading-snug truncate">
-                    {displayName}
-                  </p>
-                  <p className="text-xs text-zinc-500 mt-0.5 truncate">
-                    {[muscle, originalEn].filter(Boolean).join(" · ") || "Exercício"}
-                  </p>
-                </div>
-
-                {/* Add cue */}
-                <div className="flex-shrink-0 w-6 h-6 rounded-full border border-white/10 flex items-center justify-center text-zinc-600 group-hover:border-primary group-hover:text-primary transition-colors">
-                  <PlusIcon className="w-3 h-3" />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {showEmpty && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-900 border border-white/8">
-          <BeakerIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
-          <p className="text-xs text-zinc-500">
-            Nenhum exercício encontrado para <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -1167,25 +1181,22 @@ function CustomWorkoutEditor({
       </div>
       {/* ↑ overflow-hidden ends here — search lives outside so dropdown isn't clipped */}
 
-      {/* Add exercise section */}
-      {showSearch ? (
-        <ExerciseSearchPopover
-          onSelect={(ex) => {
-            addExercise(ex);
-            setShowSearch(false);
-          }}
-          onClose={() => setShowSearch(false)}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowSearch(true)}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-semibold text-zinc-500 border border-dashed border-white/12 hover:text-white hover:border-white/25 hover:bg-white/[0.03] transition-colors"
-        >
-          <PlusIcon className="w-3.5 h-3.5" />
-          Adicionar Exercício à Sessão {sessions[activeIdx]?.label}
-        </button>
-      )}
+      {/* Add exercise button */}
+      <button
+        type="button"
+        onClick={() => setShowSearch(true)}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold text-primary border border-primary/30 hover:bg-primary/10 transition-colors"
+      >
+        <PlusIcon className="w-4 h-4" />
+        Buscar Exercício
+      </button>
+
+      {/* Search modal */}
+      <ExerciseSearchModal
+        open={showSearch}
+        onSelect={(ex) => { addExercise(ex); setShowSearch(false); }}
+        onClose={() => setShowSearch(false)}
+      />
     </div>
   );
 }

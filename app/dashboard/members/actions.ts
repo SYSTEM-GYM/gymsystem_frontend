@@ -194,6 +194,8 @@ export async function updateMemberProfile(
 
   revalidatePath("/dashboard/members");
   revalidatePath(`/dashboard/members/${userId}`);
+  revalidatePath("/app/profile");
+  revalidatePath("/app");
   return { ok: true };
 }
 

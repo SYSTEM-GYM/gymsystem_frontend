@@ -8,6 +8,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type ActionResult = { ok: true } | { ok: false; message: string };
 
+export type BranchPricing = {
+  id: string;
+  gym_id: string;
+  monthly_price: number;
+  active: boolean;
+};
+
 export type GymPlan = {
   id: string;
   name: string;
@@ -15,6 +22,12 @@ export type GymPlan = {
   price: number;
   billing_cycle: "monthly" | "quarterly" | "yearly";
   active: boolean;
+  branch_pricings: BranchPricing[];
+};
+
+export type GymBranch = {
+  id: string;
+  name: string;
 };
 
 export type SubscriptionKpis = {
@@ -152,13 +165,83 @@ export async function getInvoices(
 
 // ── Plans ─────────────────────────────────────────────────────────────────────
 
+export async function getGyms(): Promise<GymBranch[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("gyms")
+    .select("id, name")
+    .order("name", { ascending: true });
+  return (data ?? []) as GymBranch[];
+}
+
 export async function getPlans(): Promise<GymPlan[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("gym_plans")
-    .select("id, name, description, price, billing_cycle, active")
+    .select("id, name, description, price, billing_cycle, active, plan_branch_pricing(id, gym_id, monthly_price, active)")
     .order("price", { ascending: true });
-  return (data ?? []) as GymPlan[];
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    price: Number(row.price),
+    billing_cycle: row.billing_cycle,
+    active: row.active,
+    branch_pricings: (row.plan_branch_pricing ?? []).map((bp: any) => ({
+      id: bp.id,
+      gym_id: bp.gym_id,
+      monthly_price: Number(bp.monthly_price),
+      active: bp.active,
+    })) as BranchPricing[],
+  })) as GymPlan[];
+}
+
+export async function upsertPlanBranchPricing(
+  planId: string,
+  pricings: { gym_id: string; monthly_price: number; active: boolean }[]
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const admin = createAdminClient();
+
+  // Delete removed branch pricings (gym_ids not in new list)
+  const activeGymIds = pricings.map((p) => p.gym_id);
+  if (activeGymIds.length > 0) {
+    await admin
+      .from("plan_branch_pricing")
+      .delete()
+      .eq("plan_id", planId)
+      .not("gym_id", "in", `(${activeGymIds.map((id) => `"${id}"`).join(",")})`);
+  } else {
+    // No branches selected — remove all
+    await admin.from("plan_branch_pricing").delete().eq("plan_id", planId);
+  }
+
+  if (pricings.length === 0) {
+    revalidatePath("/dashboard/finance/plans");
+    return { ok: true };
+  }
+
+  const { error } = await admin.from("plan_branch_pricing").upsert(
+    pricings.map((p) => ({
+      plan_id: planId,
+      gym_id: p.gym_id,
+      monthly_price: p.monthly_price,
+      active: p.active,
+    })),
+    { onConflict: "plan_id,gym_id" }
+  );
+
+  if (error) {
+    console.error("upsertPlanBranchPricing:", error);
+    return { ok: false, message: "Erro ao salvar preços por filial." };
+  }
+
+  revalidatePath("/dashboard/finance/plans");
+  revalidatePath("/app/wallet");
+  return { ok: true };
 }
 
 export async function createPlan(input: {

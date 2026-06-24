@@ -285,6 +285,8 @@ export type SquadMember = {
   joined_at: string;
   workouts_this_week: number;
   workouts_this_month: number;
+  current_streak: number;
+  last_workout_date: string | null;
 };
 
 export type FeedEntry = {
@@ -332,6 +334,20 @@ export type SharedWorkout = {
   exercises: CollectionExerciseRow[];
 };
 
+export type StreakRescue = {
+  id: string;
+  squad_id: string;
+  student_id: string;
+  student_name: string;
+  student_photo: string | null;
+  streak_at_risk: number;
+  missed_date: string;
+  votes_collected: number;
+  status: "pending" | "approved" | "rejected";
+  voter_ids: string[];
+  created_at: string;
+};
+
 export type SquadDetail = {
   id: string;
   name: string;
@@ -342,6 +358,7 @@ export type SquadDetail = {
   feed: FeedEntry[];
   challenges: Challenge[];
   sharedWorkouts: SharedWorkout[];
+  rescues: StreakRescue[];
 };
 
 export async function getSquadDetail(squadId: string, requestingUserId: string): Promise<SquadDetail | null> {
@@ -376,12 +393,24 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
 
   const { data: userProfiles } = await admin
     .from("users")
-    .select("id, first_name, full_name, photo_url")
+    .select("id, first_name, full_name, photo_url, current_streak, last_workout_date")
     .in("id", memberIds);
 
-  const profileMap = new Map<string, { first_name: string | null; full_name: string | null; photo_url: string | null }>();
+  const profileMap = new Map<string, {
+    first_name: string | null;
+    full_name: string | null;
+    photo_url: string | null;
+    current_streak: number;
+    last_workout_date: string | null;
+  }>();
   for (const u of userProfiles ?? []) {
-    profileMap.set(u.id, { first_name: u.first_name, full_name: u.full_name, photo_url: u.photo_url });
+    profileMap.set(u.id, {
+      first_name: u.first_name,
+      full_name: u.full_name,
+      photo_url: u.photo_url,
+      current_streak: (u.current_streak as number) ?? 0,
+      last_workout_date: (u.last_workout_date as string | null) ?? null,
+    });
   }
 
   function memberName(id: string): string {
@@ -430,6 +459,8 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
       joined_at: m.joined_at,
       workouts_this_week: weekCountMap[m.student_id] ?? 0,
       workouts_this_month: monthCountMap[m.student_id] ?? 0,
+      current_streak: profile?.current_streak ?? 0,
+      last_workout_date: profile?.last_workout_date ?? null,
     };
   });
 
@@ -608,6 +639,47 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
     }
   }
 
+  // ── Streak Rescues ──────────────────────────────────────────────────────────
+  // Show pending (and recently approved) rescues from the last 3 days
+  const threeDaysAgo = new Date(now);
+  threeDaysAgo.setDate(now.getDate() - 3);
+  const { data: rescueRows } = await admin
+    .from("squad_streak_rescues")
+    .select("id, student_id, missed_date, votes_collected, status, created_at")
+    .eq("squad_id", squadId)
+    .gte("missed_date", threeDaysAgo.toISOString().slice(0, 10))
+    .order("created_at", { ascending: false });
+
+  const rescueIds = (rescueRows ?? []).map((r) => r.id);
+  const { data: voteRows } = rescueIds.length > 0
+    ? await admin.from("squad_rescue_votes").select("rescue_id, voter_id").in("rescue_id", rescueIds)
+    : { data: [] };
+
+  const voteMap = new Map<string, string[]>();
+  for (const v of voteRows ?? []) {
+    if (!voteMap.has(v.rescue_id)) voteMap.set(v.rescue_id, []);
+    voteMap.get(v.rescue_id)!.push(v.voter_id);
+  }
+
+  const rescues: StreakRescue[] = (rescueRows ?? []).map((r) => {
+    const profile = profileMap.get(r.student_id);
+    const name = profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Aluno";
+    const streak = profile?.current_streak ?? 0;
+    return {
+      id: r.id,
+      squad_id: squadId,
+      student_id: r.student_id,
+      student_name: name,
+      student_photo: profile?.photo_url ?? null,
+      streak_at_risk: streak,
+      missed_date: r.missed_date,
+      votes_collected: r.votes_collected,
+      status: r.status as "pending" | "approved" | "rejected",
+      voter_ids: voteMap.get(r.id) ?? [],
+      created_at: r.created_at,
+    };
+  });
+
   return {
     id: squad.id,
     name: squad.name,
@@ -618,5 +690,91 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
     feed,
     challenges,
     sharedWorkouts,
+    rescues,
   };
+}
+
+// ── Streak Rescue Actions ─────────────────────────────────────────────────────
+
+export async function requestStreakRescue(
+  squadId: string,
+): Promise<ActionResult & { rescueId?: string }> {
+  const user = await getAuthUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  const supabase = await createClient();
+
+  // Must be a squad member
+  const { data: membership } = await supabase
+    .from("gymconnect_squad_members")
+    .select("student_id")
+    .eq("squad_id", squadId)
+    .eq("student_id", user.id)
+    .maybeSingle();
+  if (!membership) return { ok: false, message: "Você não é membro deste squad." };
+
+  // Missed date is yesterday
+  const yd = new Date();
+  yd.setDate(yd.getDate() - 1);
+  const missedDate = yd.toISOString().slice(0, 10);
+
+  const { data: rescue, error } = await supabase
+    .from("squad_streak_rescues")
+    .insert({ squad_id: squadId, student_id: user.id, missed_date: missedDate })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, message: "Você já pediu resgate para este dia." };
+    console.error("requestStreakRescue:", error);
+    return { ok: false, message: "Erro ao criar pedido de resgate." };
+  }
+
+  revalidatePath(`/app/gymconnect/${squadId}`);
+  return { ok: true, rescueId: rescue.id };
+}
+
+export async function voteForRescue(
+  rescueId: string,
+  squadId: string,
+): Promise<ActionResult> {
+  const user = await getAuthUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  const supabase = await createClient();
+
+  // Verify rescue belongs to squad and voter is a member (not the at-risk student)
+  const { data: rescue } = await supabase
+    .from("squad_streak_rescues")
+    .select("id, student_id, squad_id, votes_collected, status")
+    .eq("id", rescueId)
+    .eq("squad_id", squadId)
+    .maybeSingle();
+
+  if (!rescue) return { ok: false, message: "Resgate não encontrado." };
+  if (rescue.status === "approved") return { ok: false, message: "Resgate já foi aprovado." };
+  if (rescue.student_id === user.id) return { ok: false, message: "Você não pode votar no seu próprio resgate." };
+
+  // Insert vote (PK prevents duplicates)
+  const { error: voteError } = await supabase
+    .from("squad_rescue_votes")
+    .insert({ rescue_id: rescueId, voter_id: user.id });
+
+  if (voteError) {
+    if (voteError.code === "23505") return { ok: false, message: "Você já votou neste resgate." };
+    console.error("voteForRescue:", voteError);
+    return { ok: false, message: "Erro ao registrar voto." };
+  }
+
+  // Increment votes_collected and check for auto-approve (threshold: 2)
+  const newCount = rescue.votes_collected + 1;
+  const newStatus = newCount >= 2 ? "approved" : "pending";
+
+  await supabase
+    .from("squad_streak_rescues")
+    .update({ votes_collected: newCount, status: newStatus })
+    .eq("id", rescueId);
+
+  revalidatePath(`/app/gymconnect/${squadId}`);
+  return { ok: true };
 }

@@ -24,6 +24,7 @@ export type StudentOption = {
   full_name: string;
   email: string;
   phone: string | null;
+  home_gym_id: string | null;
 };
 
 export type ManualSaleInput = {
@@ -130,7 +131,7 @@ export async function searchStudents(query: string): Promise<StudentOption[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("users")
-    .select("id, full_name, email, phone")
+    .select("id, full_name, email, phone, home_gym_id")
     .eq("role", "customer")
     .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
     .order("full_name")

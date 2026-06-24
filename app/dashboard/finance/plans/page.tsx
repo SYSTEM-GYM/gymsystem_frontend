@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getPlans } from "@/app/dashboard/finance/subscription-actions";
+import { getPlans, getGyms } from "@/app/dashboard/finance/subscription-actions";
 import { getCoupons } from "./actions";
 import { PlansClient } from "./PlansClient";
 import { ArrowLeftIcon, ShoppingCartIcon } from "@heroicons/react/24/outline";
@@ -54,10 +54,11 @@ export default async function PlansPage() {
 
   if (!profile || profile.role !== "admin") redirect("/dashboard");
 
-  const [plans, coupons, dailyPasses] = await Promise.all([
+  const [plans, coupons, dailyPasses, gyms] = await Promise.all([
     getPlans(),
     getCoupons(),
     getDailyPasses(),
+    getGyms(),
   ]);
 
   return (
@@ -86,6 +87,7 @@ export default async function PlansPage() {
         initialPlans={plans}
         initialCoupons={coupons}
         initialPasses={dailyPasses}
+        gyms={gyms}
       />
     </div>
   );

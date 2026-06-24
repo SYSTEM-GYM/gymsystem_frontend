@@ -28,6 +28,7 @@ import type {
   Challenge,
   SharedWorkout,
   ChallengeType,
+  StreakRescue,
 } from "@/app/app/gymconnect-actions";
 import {
   leaveSquad,
@@ -36,6 +37,8 @@ import {
   removeSharedWorkout,
   getExercisesForPicker,
   getMyCollectionsForSharing,
+  requestStreakRescue,
+  voteForRescue,
 } from "@/app/app/gymconnect-actions";
 import { ActiveWorkout } from "@/app/components/app/ActiveWorkout";
 import type { TodayWorkoutData } from "@/lib/workout-utils";
@@ -648,15 +651,211 @@ function TreinosTab({
   );
 }
 
+// ── Resgates Tab ─────────────────────────────────────────────────────────────
+
+function ResgatesTab({
+  rescues,
+  members,
+  currentUserId,
+  squadId,
+}: {
+  rescues: StreakRescue[];
+  members: SquadMember[];
+  currentUserId: string;
+  squadId: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [msgs, setMsgs] = useState<Record<string, string>>({});
+  const [reqPending, startReq] = useTransition();
+  const [reqMsg, setReqMsg] = useState<string | null>(null);
+
+  // Compute at-risk members: last_workout_date < yesterday and streak >= 1
+  const today = new Date().toISOString().slice(0, 10);
+  const yd = new Date(); yd.setDate(yd.getDate() - 1);
+  const yesterday = yd.toISOString().slice(0, 10);
+
+  const rescuedIds = new Set(rescues.map((r) => r.student_id));
+  const atRisk = members.filter((m) => {
+    if (!m.last_workout_date) return false;
+    if (m.last_workout_date >= yesterday) return false; // worked out yesterday or today
+    if (m.current_streak < 1) return false;
+    return true;
+  });
+  // At-risk members who haven't yet requested rescue
+  const unrescuedAtRisk = atRisk.filter((m) => !rescuedIds.has(m.student_id));
+
+  const meAtRisk = unrescuedAtRisk.find((m) => m.student_id === currentUserId);
+
+  function handleVote(rescueId: string) {
+    setMsgs((prev) => ({ ...prev, [rescueId]: "" }));
+    startTransition(async () => {
+      const res = await voteForRescue(rescueId, squadId);
+      if (!res.ok) setMsgs((prev) => ({ ...prev, [rescueId]: res.message }));
+    });
+  }
+
+  function handleRequest() {
+    setReqMsg(null);
+    startReq(async () => {
+      const res = await requestStreakRescue(squadId);
+      if (!res.ok) setReqMsg(res.message);
+    });
+  }
+
+  const hasActivity = rescues.length > 0 || atRisk.length > 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Self-request banner if current user is at risk and hasn't requested rescue */}
+      {meAtRisk && (
+        <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl space-y-3">
+          <div className="flex items-start gap-3">
+            <FireIcon className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">Sua ofensiva está em risco!</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Você tem <span className="text-orange-400 font-bold">{meAtRisk.current_streak} dias</span> de ofensiva e faltou ontem.
+                Peça para seus colegas te resgatarem!
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleRequest}
+            disabled={reqPending}
+            className="w-full py-2.5 rounded-xl text-sm font-bold bg-orange-500 text-white hover:bg-orange-400 disabled:opacity-50 transition-colors"
+          >
+            {reqPending ? "Pedindo..." : "🆘 Pedir Resgate ao Squad"}
+          </button>
+          {reqMsg && <p className="text-xs text-danger">{reqMsg}</p>}
+        </div>
+      )}
+
+      {!hasActivity && !meAtRisk && (
+        <div className="py-14 text-center space-y-2">
+          <div className="w-14 h-14 mx-auto rounded-full bg-surface-2 flex items-center justify-center text-2xl">
+            🛡️
+          </div>
+          <p className="text-sm font-semibold text-zinc-400">Nenhum resgate ativo</p>
+          <p className="text-xs text-zinc-600">
+            Quando um membro faltar, a ofensiva deles aparece aqui para você votar.
+          </p>
+        </div>
+      )}
+
+      {/* Active + recent rescue cards */}
+      {rescues.map((rescue) => {
+        const isMe = rescue.student_id === currentUserId;
+        const alreadyVoted = rescue.voter_ids.includes(currentUserId);
+        const approved = rescue.status === "approved";
+        const msg = msgs[rescue.id];
+        const neededVotes = 2;
+        const progress = Math.min(1, rescue.votes_collected / neededVotes);
+
+        return (
+          <div
+            key={rescue.id}
+            className={`rounded-2xl border overflow-hidden ${
+              approved
+                ? "border-primary/30 bg-primary/5"
+                : "border-orange-500/25 bg-orange-500/5"
+            }`}
+          >
+            {/* Status bar */}
+            <div
+              className={`h-1 transition-all duration-700 ${approved ? "bg-primary" : "bg-orange-500"}`}
+              style={{ width: `${progress * 100}%` }}
+            />
+
+            <div className="p-4 space-y-3">
+              {/* Who + status */}
+              <div className="flex items-center gap-3">
+                <Avatar photo_url={rescue.student_photo} name={rescue.student_name} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white">
+                    {isMe ? "Você" : rescue.student_name}
+                    {approved
+                      ? <span className="ml-2 text-xs font-semibold text-primary">✓ Resgatado!</span>
+                      : <span className="ml-2 text-xs font-semibold text-orange-400">Em Risco</span>
+                    }
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Ofensiva de <span className={`font-bold ${approved ? "text-primary" : "text-orange-400"}`}>
+                      {rescue.streak_at_risk} dias
+                    </span> · faltou {rescue.missed_date === yesterday ? "ontem" : rescue.missed_date}
+                  </p>
+                </div>
+              </div>
+
+              {/* Vote counter */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {Array.from({ length: neededVotes }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                          i < rescue.votes_collected
+                            ? "bg-primary text-black"
+                            : "bg-surface-2 text-zinc-600"
+                        }`}
+                      >
+                        {i < rescue.votes_collected ? "✓" : "○"}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-xs text-zinc-500">
+                    {rescue.votes_collected}/{neededVotes} votos
+                  </span>
+                </div>
+
+                {!approved && !isMe && !alreadyVoted && (
+                  <button
+                    type="button"
+                    onClick={() => handleVote(rescue.id)}
+                    disabled={pending}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-50 transition-opacity min-h-[36px]"
+                  >
+                    👍 Votar
+                  </button>
+                )}
+                {!approved && (alreadyVoted || isMe) && (
+                  <span className="text-xs text-zinc-600 italic">
+                    {isMe ? "Aguardando votos..." : "Votado ✓"}
+                  </span>
+                )}
+              </div>
+
+              {/* Context message */}
+              {!approved && !isMe && !alreadyVoted && (
+                <p className="text-xs text-zinc-500 bg-surface-2 rounded-xl px-3 py-2">
+                  {rescue.student_name} faltou ontem e vai perder a ofensiva de{" "}
+                  <span className="text-orange-400 font-semibold">{rescue.streak_at_risk} dias</span>!
+                  Vote para perdoar a falta?
+                </p>
+              )}
+
+              {msg && <p className="text-xs text-danger">{msg}</p>}
+            </div>
+          </div>
+        );
+      })}
+
+      {today && null /* used to satisfy the linter about today var */}
+    </div>
+  );
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
-type Tab = "ranking" | "feed" | "desafios" | "treinos";
+type Tab = "ranking" | "feed" | "desafios" | "treinos" | "resgates";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "ranking", label: "Ranking" },
   { id: "feed", label: "Feed" },
   { id: "desafios", label: "Desafios" },
   { id: "treinos", label: "Treinos" },
+  { id: "resgates", label: "Resgates" },
 ];
 
 export function SquadDashboard({
@@ -757,6 +956,11 @@ export function SquadDashboard({
                 {squad.sharedWorkouts.length}
               </span>
             )}
+            {id === "resgates" && squad.rescues.filter((r) => r.status === "pending").length > 0 && (
+              <span className="ml-1.5 bg-orange-500/20 text-orange-400 text-[9px] px-1.5 py-0.5 rounded-full">
+                {squad.rescues.filter((r) => r.status === "pending").length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -777,6 +981,14 @@ export function SquadDashboard({
           sharedWorkouts={squad.sharedWorkouts}
           currentUserId={currentUserId}
           isCreator={isCreator}
+          squadId={squad.id}
+        />
+      )}
+      {tab === "resgates" && (
+        <ResgatesTab
+          rescues={squad.rescues}
+          members={squad.members}
+          currentUserId={currentUserId}
           squadId={squad.id}
         />
       )}

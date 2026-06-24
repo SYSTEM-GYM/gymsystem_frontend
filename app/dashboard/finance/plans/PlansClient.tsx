@@ -29,7 +29,9 @@ import {
 import {
   createPlan,
   updatePlan,
+  upsertPlanBranchPricing,
   type GymPlan,
+  type GymBranch,
 } from "@/app/dashboard/finance/subscription-actions";
 import type { DailyPassRow } from "./page";
 
@@ -70,11 +72,12 @@ type Props = {
   initialPlans: GymPlan[];
   initialCoupons: Coupon[];
   initialPasses: DailyPassRow[];
+  gyms: GymBranch[];
 };
 
 // ── Root component ─────────────────────────────────────────────────────────────
 
-export function PlansClient({ initialPlans, initialCoupons, initialPasses }: Props) {
+export function PlansClient({ initialPlans, initialCoupons, initialPasses, gyms }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("plans");
   const [plans, setPlans] = useState(initialPlans);
   const [coupons, setCoupons] = useState(initialCoupons);
@@ -107,8 +110,8 @@ export function PlansClient({ initialPlans, initialCoupons, initialPasses }: Pro
         ))}
       </div>
 
-      {activeTab === "plans"   && <PlansTab   plans={plans}   onPlansChange={setPlans} />}
-      {activeTab === "balcao"  && <BalcaoTab  plans={plans}   coupons={coupons} />}
+      {activeTab === "plans"   && <PlansTab   plans={plans}   gyms={gyms}   onPlansChange={setPlans} />}
+      {activeTab === "balcao"  && <BalcaoTab  plans={plans}   gyms={gyms}   coupons={coupons} />}
       {activeTab === "coupons" && <CouponsTab coupons={coupons} onCouponsChange={setCoupons} />}
       {activeTab === "passes"  && <PassesTab  passes={passes} />}
     </div>
@@ -117,17 +120,100 @@ export function PlansClient({ initialPlans, initialCoupons, initialPasses }: Pro
 
 // ── Plans tab ─────────────────────────────────────────────────────────────────
 
+// Branch pricing editor sub-component
+function BranchPricingEditor({
+  gyms,
+  value,
+  onChange,
+}: {
+  gyms: GymBranch[];
+  value: Record<string, string>; // gym_id -> price string
+  onChange: (v: Record<string, string>) => void;
+}) {
+  if (gyms.length === 0) {
+    return <p className="text-xs text-zinc-500">Nenhuma filial cadastrada.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {gyms.map((gym) => {
+        const priceStr = value[gym.id] ?? "";
+        const checked = gym.id in value;
+        return (
+          <div key={gym.id} className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const next = { ...value };
+                if (checked) {
+                  delete next[gym.id];
+                } else {
+                  next[gym.id] = "";
+                }
+                onChange(next);
+              }}
+              className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 ${checked ? "bg-primary border-primary" : "bg-surface-2 border-white/20"}`}
+            >
+              {checked && <CheckCircleIcon className="w-3.5 h-3.5 text-black" />}
+            </button>
+            <span className={`text-sm min-w-[120px] ${checked ? "text-zinc-200" : "text-zinc-500"}`}>{gym.name}</span>
+            {checked && (
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Preço nesta filial (R$)"
+                value={priceStr}
+                onChange={(e) => onChange({ ...value, [gym.id]: e.target.value })}
+                className="bg-surface-2 border border-white/8 rounded-xl px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-primary/50 w-48"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PlansTab({
   plans,
+  gyms,
   onPlansChange,
 }: {
   plans: GymPlan[];
+  gyms: GymBranch[];
   onPlansChange: (p: GymPlan[]) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Branch pricing state for create form
+  const [createBranchPrices, setCreateBranchPrices] = useState<Record<string, string>>({});
+  // Branch pricing state for edit form — keyed by plan id
+  const [editBranchPrices, setEditBranchPrices] = useState<Record<string, string>>({});
+
+  function openEdit(plan: GymPlan) {
+    setEditingId(plan.id);
+    setError(null);
+    setShowForm(false);
+    // Seed edit form from existing branch_pricings
+    const seed: Record<string, string> = {};
+    for (const bp of plan.branch_pricings ?? []) {
+      seed[bp.gym_id] = String(bp.monthly_price);
+    }
+    setEditBranchPrices(seed);
+  }
+
+  function parseBranchPrices(raw: Record<string, string>) {
+    return Object.entries(raw)
+      .filter(([, v]) => v.trim() !== "" && !isNaN(parseFloat(v)))
+      .map(([gym_id, v]) => ({
+        gym_id,
+        monthly_price: parseFloat(v.replace(",", ".")),
+        active: true,
+      }));
+  }
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -138,28 +224,37 @@ function PlansTab({
     const billing_cycle = fd.get("billing_cycle") as "monthly" | "quarterly" | "yearly";
 
     if (!name || isNaN(price) || price <= 0) {
-      setError("Preencha nome e valor corretamente.");
+      setError("Preencha nome e valor base corretamente.");
       return;
     }
 
+    const branchPricings = parseBranchPrices(createBranchPrices);
+
     startTransition(async () => {
       const res = await createPlan({ name, description, price, billing_cycle });
-      if (res.ok) {
-        onPlansChange([
-          ...plans,
-          {
-            id: crypto.randomUUID(),
-            name,
-            description,
-            price,
-            billing_cycle,
-            active: true,
-          } as GymPlan,
-        ]);
-        setShowForm(false);
-        setError(null);
-      } else {
-        setError(res.message);
+      if (!res.ok) { setError(res.message); return; }
+
+      // We need the real ID — fetch latest plan matching name (simple approach)
+      // Instead, we'll reload after — the plan list will get refreshed via revalidatePath
+      // For optimistic update, we use a temp ID
+      const tempId = crypto.randomUUID();
+      const newPlan: GymPlan = { id: tempId, name, description, price, billing_cycle, active: true, branch_pricings: [] };
+
+      if (branchPricings.length > 0) {
+        // We need the real ID; skip optimistic branch pricing — let the page revalidate show it
+        // For now just upsert after. We'll re-fetch in BalcaoTab from props anyway.
+        // The plan create returns {ok:true} without the id — we can't upsert here.
+        // The revalidatePath in createPlan will refresh the server component.
+      }
+
+      onPlansChange([...plans, newPlan]);
+      setShowForm(false);
+      setCreateBranchPrices({});
+      setError(null);
+
+      // If branch pricings were set, we need the plan id. Signal admin to re-open and edit.
+      if (branchPricings.length > 0) {
+        setError("Plano criado. Para salvar preços por filial, edite o plano recém-criado.");
       }
     });
   }
@@ -173,23 +268,42 @@ function PlansTab({
     const billing_cycle = fd.get("billing_cycle") as "monthly" | "quarterly" | "yearly";
 
     if (!name || isNaN(price) || price <= 0) {
-      setError("Preencha nome e valor corretamente.");
+      setError("Preencha nome e valor base corretamente.");
       return;
     }
 
+    const branchPricings = parseBranchPrices(editBranchPrices);
+
     startTransition(async () => {
-      const res = await updatePlan({ id: plan.id, name, description, price, billing_cycle });
-      if (res.ok) {
-        onPlansChange(
-          plans.map((p) =>
-            p.id === plan.id ? { ...p, name, description, price, billing_cycle } : p
-          )
-        );
-        setEditingId(null);
-        setError(null);
-      } else {
-        setError(res.message);
-      }
+      const [planRes, priceRes] = await Promise.all([
+        updatePlan({ id: plan.id, name, description, price, billing_cycle }),
+        upsertPlanBranchPricing(plan.id, branchPricings),
+      ]);
+
+      if (!planRes.ok) { setError(planRes.message); return; }
+      if (!priceRes.ok) { setError(priceRes.message); return; }
+
+      onPlansChange(
+        plans.map((p) =>
+          p.id === plan.id
+            ? {
+                ...p,
+                name,
+                description,
+                price,
+                billing_cycle,
+                branch_pricings: branchPricings.map((bp) => ({
+                  id: p.branch_pricings.find((x) => x.gym_id === bp.gym_id)?.id ?? crypto.randomUUID(),
+                  gym_id: bp.gym_id,
+                  monthly_price: bp.monthly_price,
+                  active: bp.active,
+                })),
+              }
+            : p
+        )
+      );
+      setEditingId(null);
+      setError(null);
     });
   }
 
@@ -203,7 +317,7 @@ function PlansTab({
           {plans.length} plano{plans.length !== 1 ? "s" : ""} cadastrado{plans.length !== 1 ? "s" : ""}
         </p>
         <button
-          onClick={() => { setShowForm(!showForm); setError(null); }}
+          onClick={() => { setShowForm(!showForm); setError(null); setCreateBranchPrices({}); }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-black text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <PlusIcon className="w-4 h-4" />
@@ -215,10 +329,10 @@ function PlansTab({
       {showForm && (
         <div className="bg-surface-1 border border-white/8 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-semibold text-white">Novo Plano de Assinatura</h3>
-          <form onSubmit={handleCreate} className="space-y-3">
+          <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <input name="name" required placeholder="Nome do plano" className={inputCls} />
-              <input name="price" type="number" step="0.01" min="0" required placeholder="Valor (R$)" className={inputCls} />
+              <input name="price" type="number" step="0.01" min="0" required placeholder="Valor base (R$)" className={inputCls} />
               <select name="billing_cycle" defaultValue="monthly" className={inputCls}>
                 <option value="monthly">Mensal</option>
                 <option value="quarterly">Trimestral</option>
@@ -257,27 +371,22 @@ function PlansTab({
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Nome</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden md:table-cell">Descrição</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Ciclo</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Valor</th>
-                <th className="text-right px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden lg:table-cell">MRR equiv.</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Valor Base</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden lg:table-cell">Filiais</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {plans.map((plan) => {
-                const mrrEquiv =
-                  plan.billing_cycle === "monthly" ? plan.price
-                  : plan.billing_cycle === "quarterly" ? plan.price / 3
-                  : plan.price / 12;
-
                 if (editingId === plan.id) {
                   return (
                     <tr key={plan.id} className="bg-surface-2/30">
                       <td colSpan={7} className="px-5 py-4">
-                        <form onSubmit={(e) => handleUpdate(plan, e)} className="space-y-3">
+                        <form onSubmit={(e) => handleUpdate(plan, e)} className="space-y-4">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <input name="name" defaultValue={plan.name} required placeholder="Nome" className={inputCls} />
-                            <input name="price" type="number" step="0.01" min="0" defaultValue={plan.price} required placeholder="Valor (R$)" className={inputCls} />
+                            <input name="price" type="number" step="0.01" min="0" defaultValue={plan.price} required placeholder="Valor base (R$)" className={inputCls} />
                             <select name="billing_cycle" defaultValue={plan.billing_cycle} className={inputCls}>
                               <option value="monthly">Mensal</option>
                               <option value="quarterly">Trimestral</option>
@@ -290,6 +399,23 @@ function PlansTab({
                             placeholder="Descrição (opcional)"
                             className={`${inputCls} w-full`}
                           />
+                          {/* Branch pricing */}
+                          {gyms.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                                Preços por Filial
+                              </p>
+                              <p className="text-[11px] text-zinc-600">
+                                Marque as filiais onde este plano está disponível e defina o preço específico.
+                                Filiais desmarcadas não verão este plano.
+                              </p>
+                              <BranchPricingEditor
+                                gyms={gyms}
+                                value={editBranchPrices}
+                                onChange={setEditBranchPrices}
+                              />
+                            </div>
+                          )}
                           {error && <p className="text-xs text-danger">{error}</p>}
                           <div className="flex gap-3">
                             <button type="submit" disabled={isPending} className="px-4 py-2 rounded-xl bg-primary text-black text-sm font-semibold disabled:opacity-50">
@@ -315,7 +441,22 @@ function PlansTab({
                     </td>
                     <td className="px-4 py-3.5 text-xs text-zinc-500">{CYCLE_LABELS[plan.billing_cycle]}</td>
                     <td className="px-4 py-3.5 text-right font-semibold text-primary tabular-nums">{fmt(plan.price)}</td>
-                    <td className="px-5 py-3.5 text-right text-xs text-zinc-500 tabular-nums hidden lg:table-cell">{fmt(mrrEquiv)}/mês</td>
+                    <td className="px-4 py-3.5 hidden lg:table-cell">
+                      {plan.branch_pricings.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {plan.branch_pricings.map((bp) => {
+                            const gymName = gyms.find((g) => g.id === bp.gym_id)?.name ?? bp.gym_id.slice(0, 6);
+                            return (
+                              <span key={bp.gym_id} className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full">
+                                {gymName}: {fmt(bp.monthly_price)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-zinc-600">Global (sem filial)</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3.5 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${plan.active ? "bg-primary/10 text-primary border-primary/20" : "bg-zinc-700/30 text-zinc-500 border-zinc-700/50"}`}>
                         {plan.active ? "Ativo" : "Inativo"}
@@ -323,7 +464,7 @@ function PlansTab({
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <button
-                        onClick={() => { setEditingId(plan.id); setError(null); setShowForm(false); }}
+                        onClick={() => openEdit(plan)}
                         className="p-1.5 rounded-lg text-zinc-500 hover:text-white transition-colors"
                         title="Editar plano"
                       >
@@ -343,7 +484,7 @@ function PlansTab({
 
 // ── Balcão (POS) tab ──────────────────────────────────────────────────────────
 
-function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) {
+function BalcaoTab({ plans, gyms, coupons }: { plans: GymPlan[]; gyms: GymBranch[]; coupons: Coupon[] }) {
   const [step, setStep] = useState<"idle" | "form" | "success">("idle");
   const [result, setResult] = useState<{ message: string; stripe_url?: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -359,8 +500,16 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
   const [paymentMethod, setPaymentMethod] = useState<"cash_pix" | "stripe">("cash_pix");
   const [copiedUrl, setCopiedUrl] = useState(false);
 
+  // Resolve branch-specific price when student has a home gym and plan has branch pricing
+  const branchPrice = productType === "plan" && selectedPlan && student?.home_gym_id
+    ? selectedPlan.branch_pricings.find((bp) => bp.gym_id === student.home_gym_id && bp.active)?.monthly_price ?? null
+    : null;
+  const branchGymName = branchPrice !== null && student?.home_gym_id
+    ? gyms.find((g) => g.id === student.home_gym_id)?.name ?? null
+    : null;
+
   const baseAmount = productType === "plan"
-    ? (selectedPlan?.price ?? 0)
+    ? (branchPrice ?? selectedPlan?.price ?? 0)
     : passQty * 20;
 
   const finalAmount = couponResult?.valid ? couponResult.final_amount : baseAmount;
@@ -572,6 +721,11 @@ function BalcaoTab({ plans, coupons }: { plans: GymPlan[]; coupons: Coupon[] }) 
 
         {/* Summary & submit */}
         <div className="border-t border-white/5 pt-4 space-y-3">
+          {branchGymName && (
+            <p className="text-xs text-primary/80 bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+              Preço da filial <span className="font-semibold">{branchGymName}</span> aplicado
+            </p>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-500">Subtotal</span>
             <span className="text-zinc-300 tabular-nums">{fmt(baseAmount)}</span>

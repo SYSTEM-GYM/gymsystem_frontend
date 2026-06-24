@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TodayWorkout } from "@/app/components/app/TodayWorkout";
 import { StreakWidget } from "@/app/components/app/StreakWidget";
-import { MuscleHeatmap } from "@/app/components/app/MuscleHeatmap";
+import { MuscleRadarChart } from "@/app/components/app/MuscleRadarChart";
 import { resolveTodayWorkout } from "@/lib/workout-utils";
 import { getMuscleHeatmapData } from "@/app/app/workout-actions";
 import Link from "next/link";
@@ -171,8 +171,8 @@ export default async function StudentHomePage() {
         </div>
       )}
 
-      {/* Muscle Heatmap */}
-      <MuscleHeatmap volume={muscleVolume} />
+      {/* Muscle Radar Chart */}
+      <MuscleRadarChart volume={muscleVolume} />
 
       {/* Library shortcut */}
       <Link
