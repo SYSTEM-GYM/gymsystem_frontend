@@ -1083,8 +1083,14 @@ function CustomWorkoutEditor({
             <tbody className="divide-y divide-white/5">
               {activeSession.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-xs text-zinc-600">
-                    Nenhum exercício nesta sessão. Clique em &ldquo;+ Adicionar Exercício&rdquo; abaixo.
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <ClipboardDocumentListIcon className="w-8 h-8 text-zinc-700" />
+                      <p className="text-sm font-semibold text-zinc-500">Sessão {activeSession.label} vazia</p>
+                      <p className="text-xs text-zinc-600">
+                        Clique em <span className="text-zinc-400 font-medium">&ldquo;+ Adicionar Exercício&rdquo;</span> abaixo para começar.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (

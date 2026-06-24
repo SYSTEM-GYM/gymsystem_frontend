@@ -9,10 +9,12 @@ import {
   FilmIcon,
   VideoCameraIcon,
   TrashIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import {
   createExercise,
   deleteExercise,
+  seedDefaultExercises,
   type SettingsActionState,
 } from "@/app/dashboard/settings/actions";
 
@@ -395,6 +397,44 @@ function ExerciseCard({
   );
 }
 
+// ── Seed Button ───────────────────────────────────────────────────────────────
+
+function SeedExercisesButton() {
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  function handleSeed() {
+    setResult(null);
+    startTransition(async () => {
+      const res = await seedDefaultExercises();
+      setResult(
+        res.ok
+          ? { ok: true, message: `${res.count} exercícios adicionados com sucesso!` }
+          : { ok: false, message: res.error },
+      );
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <button
+        type="button"
+        onClick={handleSeed}
+        disabled={isPending}
+        className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
+      >
+        <SparklesIcon className="w-4 h-4" />
+        {isPending ? "Populando exercícios..." : "Popular Exercícios Padrão"}
+      </button>
+      {result && (
+        <p className={`text-xs ${result.ok ? "text-primary" : "text-danger"}`}>
+          {result.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function ExerciseManager({ initialExercises }: Props) {
@@ -420,12 +460,18 @@ export function ExerciseManager({ initialExercises }: Props) {
       </div>
 
       {initialExercises.length === 0 ? (
-        <div className="p-12 flex flex-col items-center gap-3 text-center">
-          <VideoCameraIcon className="w-10 h-10 text-zinc-700" />
-          <p className="text-sm text-zinc-500">Nenhum exercício cadastrado.</p>
-          <p className="text-xs text-zinc-600">
-            Adicione exercícios para montar os treinos dos alunos.
-          </p>
+        <div className="p-12 flex flex-col items-center gap-5 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center">
+            <VideoCameraIcon className="w-8 h-8 text-zinc-600" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-zinc-400">Biblioteca de exercícios vazia</p>
+            <p className="text-xs text-zinc-600 max-w-xs">
+              Popule instantaneamente com 35 exercícios essenciais já traduzidos para pt-BR, ou adicione manualmente.
+            </p>
+          </div>
+          <SeedExercisesButton />
+          <p className="text-xs text-zinc-700">ou use o botão "Novo Exercício" acima para adicionar manualmente</p>
         </div>
       ) : (
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
