@@ -281,3 +281,91 @@ export async function seedDefaultExercises(): Promise<
   revalidatePath("/dashboard/settings");
   return { ok: true, count: rows.length };
 }
+
+// ── Sync from Cloudflare R2 ───────────────────────────────────────────────────
+
+type ExerciseDbEntry = {
+  id: string;
+  name: string;
+  primaryMuscles?: string[];
+  secondaryMuscles?: string[];
+  equipment?: string;
+  level?: string;
+  category?: string;
+  instructions?: string | string[];
+};
+
+const PRIMARY_MUSCLE_TO_GROUP: Record<string, string> = {
+  pectorals: "chest", "upper chest": "chest",
+  lats: "back", traps: "back", "upper back": "back", "lower back": "back",
+  spine: "back", rhomboids: "back", "levator scapulae": "back",
+  delts: "shoulders", "front delts": "shoulders", "rear delts": "shoulders", "lateral delts": "shoulders",
+  biceps: "biceps", forearms: "biceps", brachialis: "biceps",
+  triceps: "triceps",
+  quads: "legs", quadriceps: "legs", hamstrings: "legs", calves: "legs",
+  adductors: "legs", abductors: "legs",
+  glutes: "glutes", "hip flexors": "glutes",
+  abs: "core", "upper abs": "core", "lower abs": "core", obliques: "core",
+  "serratus anterior": "core", "transverse abdominis": "core",
+  "cardiovascular system": "cardio",
+};
+
+export async function syncExercisesFromCloudflare(): Promise<
+  { ok: true; count: number } | { ok: false; error: string }
+> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { ok: false, error: auth.message };
+
+  const r2Base = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+  if (!r2Base) return { ok: false, error: "R2_PUBLIC_URL não configurado no servidor." };
+
+  let exercises: ExerciseDbEntry[];
+  try {
+    const res = await fetch(
+      "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json",
+      { cache: "no-store" },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    exercises = await res.json() as ExerciseDbEntry[];
+  } catch (err) {
+    return { ok: false, error: `Falha ao buscar base de exercícios do GitHub: ${String(err)}` };
+  }
+
+  const admin = createAdminClient();
+
+  const rows = exercises.map((ex) => {
+    const muscle = ex.primaryMuscles?.[0] ?? null;
+    const instText = Array.isArray(ex.instructions)
+      ? ex.instructions.join("\n")
+      : (ex.instructions ?? null);
+    return {
+      external_id: String(ex.id),
+      title: ex.name,
+      translated_name: null as string | null,
+      primary_muscle: muscle,
+      secondary_muscles: Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles : [],
+      equipment: ex.equipment ?? null,
+      difficulty: ex.level ?? null,
+      instructions: instText,
+      description: instText,
+      muscle_group: muscle ? (PRIMARY_MUSCLE_TO_GROUP[muscle.toLowerCase()] ?? null) : null,
+      video_url: muscle ? `${r2Base}/exercises/${muscle}/${ex.id}.webm` : null,
+      created_by: auth.userId,
+    };
+  });
+
+  // Batch upsert in chunks of 100 to stay within payload limits
+  const BATCH = 100;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await admin
+      .from("exercises")
+      .upsert(rows.slice(i, i + BATCH), { onConflict: "external_id", ignoreDuplicates: false });
+    if (error) {
+      console.error("syncExercisesFromCloudflare batch error:", error);
+      return { ok: false, error: `Erro no lote ${Math.floor(i / BATCH) + 1}: ${error.message}` };
+    }
+  }
+
+  revalidatePath("/dashboard/settings");
+  return { ok: true, count: rows.length };
+}

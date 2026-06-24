@@ -1,7 +1,31 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect, useCallback } from "react";
+import { Component, type ReactNode, useState, useTransition, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+
+// ── Error Boundary ─────────────────────────────────────────────────────────────
+class ErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="rounded-2xl border border-danger/20 bg-danger/5 px-5 py-4 text-xs text-danger">
+          Erro ao carregar o Editor de Ficha: {this.state.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   UserCircleIcon,
   ScaleIcon,
@@ -1256,7 +1280,14 @@ function TabWorkout({
 }) {
   return (
     <div className="space-y-6">
-      <CustomWorkoutEditor studentId={studentId} studentName={studentName} />
+      {/* ── Editor de Ficha Personalizada (ABC Builder) ───────────────────── */}
+      <div className="rounded-3xl border border-primary/20 bg-primary/5 p-5">
+        <ErrorBoundary>
+          <CustomWorkoutEditor studentId={studentId} studentName={studentName} />
+        </ErrorBoundary>
+      </div>
+
+      {/* ── Vitrine de Treinos ────────────────────────────────────────────── */}
       <MemberWorkoutPanel
         userId={studentId}
         collections={collections}

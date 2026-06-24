@@ -15,6 +15,7 @@ import {
   createExercise,
   deleteExercise,
   seedDefaultExercises,
+  syncExercisesFromCloudflare,
   type SettingsActionState,
 } from "@/app/dashboard/settings/actions";
 
@@ -397,7 +398,43 @@ function ExerciseCard({
   );
 }
 
-// ── Seed Button ───────────────────────────────────────────────────────────────
+// ── Action Buttons ────────────────────────────────────────────────────────────
+
+function R2SyncButton() {
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  function handleSync() {
+    setResult(null);
+    startTransition(async () => {
+      const res = await syncExercisesFromCloudflare();
+      setResult(
+        res.ok
+          ? { ok: true, message: `${res.count} exercícios sincronizados do Cloudflare R2!` }
+          : { ok: false, message: res.error },
+      );
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={isPending}
+        className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
+      >
+        <SparklesIcon className="w-4 h-4" />
+        {isPending ? "Sincronizando com R2..." : "☁️ Sincronizar com Cloudflare R2"}
+      </button>
+      {result && (
+        <p className={`text-xs ${result.ok ? "text-primary" : "text-danger"}`}>
+          {result.message}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function SeedExercisesButton() {
   const [isPending, startTransition] = useTransition();
@@ -409,29 +446,21 @@ function SeedExercisesButton() {
       const res = await seedDefaultExercises();
       setResult(
         res.ok
-          ? { ok: true, message: `${res.count} exercícios adicionados com sucesso!` }
+          ? { ok: true, message: `${res.count} exercícios padrão adicionados!` }
           : { ok: false, message: res.error },
       );
     });
   }
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      <button
-        type="button"
-        onClick={handleSeed}
-        disabled={isPending}
-        className="inline-flex items-center gap-2.5 px-6 py-3 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
-      >
-        <SparklesIcon className="w-4 h-4" />
-        {isPending ? "Populando exercícios..." : "Popular Exercícios Padrão"}
-      </button>
-      {result && (
-        <p className={`text-xs ${result.ok ? "text-primary" : "text-danger"}`}>
-          {result.message}
-        </p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={handleSeed}
+      disabled={isPending}
+      className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
+    >
+      {isPending ? "Adicionando..." : "Ou adicionar 35 exercícios padrão"}
+    </button>
   );
 }
 
@@ -470,8 +499,8 @@ export function ExerciseManager({ initialExercises }: Props) {
               Popule instantaneamente com 35 exercícios essenciais já traduzidos para pt-BR, ou adicione manualmente.
             </p>
           </div>
+          <R2SyncButton />
           <SeedExercisesButton />
-          <p className="text-xs text-zinc-700">ou use o botão "Novo Exercício" acima para adicionar manualmente</p>
         </div>
       ) : (
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
