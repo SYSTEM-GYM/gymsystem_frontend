@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   BoltIcon,
   ClockIcon,
   PlayCircleIcon,
+  PlusIcon,
   SparklesIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import type { StudentWorkoutItem } from "@/lib/workout-utils";
+import { deleteStudentWorkout } from "@/app/app/workout-actions";
 import { WorkoutPreviewModal } from "./WorkoutPreviewModal";
+import { StudentWorkoutBuilderModal } from "./StudentWorkoutBuilderModal";
 
 type Props = {
   workouts: StudentWorkoutItem[];
@@ -22,6 +27,18 @@ function WorkoutCard({
   workout: StudentWorkoutItem;
   onStart: () => void;
 }) {
+  const router = useRouter();
+  const [deleting, startDeleting] = useTransition();
+
+  function handleDelete() {
+    if (!confirm(`Excluir o treino "${workout.collectionName}"?`)) return;
+    startDeleting(async () => {
+      const result = await deleteStudentWorkout(workout.collectionId);
+      if (result.ok) router.refresh();
+      else alert(result.message);
+    });
+  }
+
   return (
     <div
       className={`snap-start shrink-0 w-[78%] max-w-75 bg-surface-1 border rounded-3xl overflow-hidden flex flex-col ${
@@ -39,13 +56,33 @@ function WorkoutCard({
 
       <div className="p-4 flex flex-col flex-1 gap-3">
         <div>
-          {workout.suggestedToday && (
-            <p className="flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-widest mb-1">
-              <SparklesIcon className="w-3 h-3" />
-              Sugerido para hoje
-            </p>
-          )}
-          <h3 className="font-black text-white leading-tight line-clamp-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap min-h-4">
+              {workout.suggestedToday && (
+                <p className="flex items-center gap-1 text-[10px] font-semibold text-primary uppercase tracking-widest">
+                  <SparklesIcon className="w-3 h-3" />
+                  Sugerido para hoje
+                </p>
+              )}
+              {workout.createdByMe && (
+                <span className="text-[9px] font-bold text-info bg-info/10 border border-info/20 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                  Meu treino
+                </span>
+              )}
+            </div>
+            {workout.createdByMe && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                title="Excluir treino"
+                className="p-1 -mr-1 -mt-1 text-zinc-700 hover:text-danger transition-colors disabled:opacity-40 shrink-0"
+              >
+                <TrashIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <h3 className="font-black text-white leading-tight line-clamp-2 mt-1">
             {workout.collectionName}
           </h3>
           <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1.5">
@@ -103,21 +140,29 @@ function WorkoutCard({
   );
 }
 
-export function WorkoutShelf({ workouts, lastLogs }: Props) {
-  const [preview, setPreview] = useState<StudentWorkoutItem | null>(null);
-
-  if (workouts.length === 0) {
-    return (
-      <div className="p-6 bg-surface-1 border border-dashed border-white/10 rounded-3xl text-center">
-        <p className="text-sm font-semibold text-zinc-500">
-          Nenhuma ficha de treino atribuída
-        </p>
-        <p className="text-xs text-zinc-600 mt-1">
-          Peça ao seu personal para atribuir uma ficha de treino.
+function CreateWorkoutCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="snap-start shrink-0 w-[62%] max-w-60 min-h-55 border border-dashed border-white/15 rounded-3xl flex flex-col items-center justify-center gap-3 text-center p-5 hover:border-primary/40 active:scale-[0.98] transition-all"
+    >
+      <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+        <PlusIcon className="w-6 h-6 text-primary" />
+      </div>
+      <div>
+        <p className="text-sm font-black text-white">Criar Meu Treino</p>
+        <p className="text-[11px] text-zinc-600 mt-1 leading-snug">
+          Monte sua própria ficha escolhendo os exercícios.
         </p>
       </div>
-    );
-  }
+    </button>
+  );
+}
+
+export function WorkoutShelf({ workouts, lastLogs }: Props) {
+  const [preview, setPreview] = useState<StudentWorkoutItem | null>(null);
+  const [showBuilder, setShowBuilder] = useState(false);
 
   return (
     <>
@@ -136,6 +181,17 @@ export function WorkoutShelf({ workouts, lastLogs }: Props) {
           </span>
         </div>
 
+        {workouts.length === 0 && (
+          <div className="p-6 bg-surface-1 border border-dashed border-white/10 rounded-3xl text-center">
+            <p className="text-sm font-semibold text-zinc-500">
+              Nenhuma ficha de treino atribuída
+            </p>
+            <p className="text-xs text-zinc-600 mt-1">
+              Peça ao seu personal — ou monte seu próprio treino abaixo.
+            </p>
+          </div>
+        )}
+
         {/* Horizontal scrollable shelf */}
         <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-2 [-webkit-overflow-scrolling:touch] scrollbar-none [&::-webkit-scrollbar]:hidden">
           {workouts.map((w) => (
@@ -145,6 +201,7 @@ export function WorkoutShelf({ workouts, lastLogs }: Props) {
               onStart={() => setPreview(w)}
             />
           ))}
+          <CreateWorkoutCard onClick={() => setShowBuilder(true)} />
         </div>
       </div>
 
@@ -154,6 +211,10 @@ export function WorkoutShelf({ workouts, lastLogs }: Props) {
           lastLogs={lastLogs}
           onClose={() => setPreview(null)}
         />
+      )}
+
+      {showBuilder && (
+        <StudentWorkoutBuilderModal onClose={() => setShowBuilder(false)} />
       )}
     </>
   );

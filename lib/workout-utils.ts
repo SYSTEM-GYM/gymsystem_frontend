@@ -36,6 +36,8 @@ export function dayLabel(day: number): string {
 export type StudentWorkoutItem = TodayWorkoutData & {
   /** True for the session the old "Treino de Hoje" logic would have picked. */
   suggestedToday: boolean;
+  /** True when the collection was created by the student (self-service). */
+  createdByMe: boolean;
 };
 
 type SupabaseLike = {
@@ -96,7 +98,7 @@ export async function fetchStudentWorkouts(
   const [{ data: collections }, { data: rows }] = await Promise.all([
     supabase
       .from("exercise_collections")
-      .select("id, name, estimated_duration_minutes")
+      .select("id, name, estimated_duration_minutes, created_by")
       .in("id", collectionIds),
     supabase
       .from("collection_exercises")
@@ -134,7 +136,12 @@ export async function fetchStudentWorkouts(
     });
   }
 
-  type CollectionRow = { id: string; name: string; estimated_duration_minutes: number };
+  type CollectionRow = {
+    id: string;
+    name: string;
+    estimated_duration_minutes: number;
+    created_by: string;
+  };
   const collectionById = new Map(
     ((collections ?? []) as CollectionRow[]).map((c) => [c.id, c]),
   );
@@ -154,6 +161,7 @@ export async function fetchStudentWorkouts(
         scheduleType: scheduleTypeByCollection.get(id) ?? "session",
         exercises: exercisesByCollection[id] ?? [],
         suggestedToday: id === suggestedId,
+        createdByMe: collection.created_by === userId,
       };
     })
     .filter((w): w is StudentWorkoutItem => w !== null);

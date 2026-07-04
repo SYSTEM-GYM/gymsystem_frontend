@@ -229,6 +229,161 @@ export async function getLastExerciseLog(
   return data;
 }
 
+// ── Student custom workouts ───────────────────────────────────────────────────
+
+export type StudentExerciseResult = {
+  id: string;
+  title: string;
+  translated_name: string | null;
+  muscle_group: string | null;
+  youtube_url: string | null;
+  webm_path: string | null;
+  video_url: string | null;
+};
+
+export async function searchStudentExercises(
+  query: string,
+  muscleGroup: string | null,
+): Promise<StudentExerciseResult[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  let q = supabase
+    .from("exercises")
+    .select("id, title, translated_name, muscle_group, youtube_url, webm_path, video_url")
+    .order("translated_name", { ascending: true, nullsFirst: false })
+    .limit(48);
+
+  const term = query.trim();
+  if (term.length >= 2) {
+    q = q.or(`title.ilike.%${term}%,translated_name.ilike.%${term}%`);
+  }
+  if (muscleGroup) {
+    q = q.eq("muscle_group", muscleGroup);
+  }
+
+  const { data } = await q;
+  return (data ?? []) as StudentExerciseResult[];
+}
+
+export type CustomWorkoutExerciseInput = {
+  exerciseId: string;
+  sets: number;
+  reps: number;
+};
+
+export type CreateCustomWorkoutResult =
+  | { ok: true; collectionId: string }
+  | { ok: false; message: string };
+
+export async function createStudentWorkout(input: {
+  name: string;
+  exercises: CustomWorkoutExerciseInput[];
+}): Promise<CreateCustomWorkoutResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  const name = input.name.trim();
+  if (name.length < 3) return { ok: false, message: "Dê um nome ao treino (mín. 3 letras)." };
+  if (input.exercises.length === 0) {
+    return { ok: false, message: "Selecione pelo menos um exercício." };
+  }
+
+  // RLS (collections_owner_insert) enforces created_by = auth.uid()
+  const { data: collection, error: colError } = await supabase
+    .from("exercise_collections")
+    .insert({
+      name,
+      description: "Treino criado pelo aluno",
+      estimated_duration_minutes: Math.max(20, input.exercises.length * 8),
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (colError || !collection) {
+    console.error("createStudentWorkout collection:", colError);
+    return { ok: false, message: "Erro ao criar o treino." };
+  }
+
+  const { error: exError } = await supabase.from("collection_exercises").insert(
+    input.exercises.map((e, idx) => ({
+      collection_id: collection.id,
+      exercise_id: e.exerciseId,
+      sort_order: idx,
+      default_sets: Math.min(10, Math.max(1, Math.round(e.sets) || 3)),
+      default_reps: Math.min(100, Math.max(1, Math.round(e.reps) || 12)),
+    })),
+  );
+
+  if (exError) {
+    console.error("createStudentWorkout exercises:", exError);
+    await supabase.from("exercise_collections").delete().eq("id", collection.id);
+    return { ok: false, message: "Erro ao salvar os exercícios do treino." };
+  }
+
+  // Schedule row makes it show up on the student's shelf
+  const { error: schedError } = await supabase.from("workout_schedules").insert({
+    user_id: user.id,
+    collection_id: collection.id,
+    schedule_type: "custom",
+    sort_order: 90,
+  });
+
+  if (schedError) {
+    console.error("createStudentWorkout schedule:", schedError);
+    return { ok: false, message: "Treino criado, mas não foi possível agendá-lo." };
+  }
+
+  revalidatePath("/app");
+  return { ok: true, collectionId: collection.id };
+}
+
+export async function deleteStudentWorkout(collectionId: string): Promise<LogExerciseResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  // Only collections the student owns pass this filter (defense in depth on
+  // top of RLS owner policies).
+  const { data: owned } = await supabase
+    .from("exercise_collections")
+    .select("id")
+    .eq("id", collectionId)
+    .eq("created_by", user.id)
+    .maybeSingle();
+
+  if (!owned) return { ok: false, message: "Você só pode excluir treinos criados por você." };
+
+  // Remove own schedule rows first (collection delete is RESTRICT-referenced)
+  await supabase
+    .from("workout_schedules")
+    .delete()
+    .eq("collection_id", collectionId)
+    .eq("user_id", user.id);
+
+  const { error } = await supabase
+    .from("exercise_collections")
+    .delete()
+    .eq("id", collectionId);
+
+  if (error) {
+    console.error("deleteStudentWorkout:", error);
+    return { ok: false, message: "Erro ao excluir o treino." };
+  }
+
+  revalidatePath("/app");
+  return { ok: true };
+}
+
 export type MuscleVolume = Record<string, number>;
 
 export async function getMuscleHeatmapData(): Promise<MuscleVolume> {

@@ -9,8 +9,9 @@ import {
   XMarkIcon,
   ClipboardDocumentIcon,
   CheckIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import { TrophyIcon } from "@heroicons/react/24/solid";
+import { TrophyIcon, UserGroupIcon } from "@heroicons/react/24/solid";
 import { createSquad, joinSquad, type SquadWithMeta } from "@/app/app/gymconnect-actions";
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
@@ -41,12 +42,13 @@ function SquadCard({ squad }: { squad: SquadWithMeta }) {
   return (
     <Link
       href={`/app/gymconnect/${squad.id}`}
-      className="block bg-surface-1 border border-white/5 rounded-2xl p-4 hover:border-white/15 transition-colors active:scale-[0.99]"
+      className="block bg-surface-1 border border-white/8 rounded-3xl overflow-hidden hover:border-primary/25 transition-colors active:scale-[0.99]"
     >
-      <div className="flex items-start gap-3">
+      <div className="h-1 bg-linear-to-r from-primary/60 via-primary/20 to-transparent" />
+      <div className="flex items-center gap-3 p-4">
         <Initials name={squad.name} />
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-white text-sm leading-snug">{squad.name}</p>
+          <p className="font-bold text-white text-sm leading-snug truncate">{squad.name}</p>
           {squad.description && (
             <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">{squad.description}</p>
           )}
@@ -58,14 +60,14 @@ function SquadCard({ squad }: { squad: SquadWithMeta }) {
             <button
               type="button"
               onClick={copyCode}
-              className="flex items-center gap-1 hover:text-zinc-400 transition-colors"
+              className="flex items-center gap-1 hover:text-zinc-400 transition-colors font-mono"
             >
               {copied ? <CheckIcon className="w-3 h-3 text-primary" /> : <ClipboardDocumentIcon className="w-3 h-3" />}
               {copied ? "Copiado!" : squad.invite_code}
             </button>
           </div>
         </div>
-        <TrophyIcon className="w-4 h-4 text-zinc-700 shrink-0 mt-0.5" />
+        <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0" />
       </div>
     </Link>
   );
@@ -210,6 +212,19 @@ export function SquadListClient({ squads }: { squads: SquadWithMeta[] }) {
 
   return (
     <>
+      {/* Hero CTA — first squad */}
+      {squads.length === 0 && (
+        <div className="relative overflow-hidden bg-surface-1 border border-white/8 rounded-3xl p-6 text-center bg-linear-to-br from-primary/12 via-surface-1 to-surface-1">
+          <div className="w-16 h-16 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center mx-auto mb-4">
+            <UserGroupIcon className="w-8 h-8 text-primary" />
+          </div>
+          <p className="font-black text-white">Monte seu Squad</p>
+          <p className="text-xs text-zinc-500 mt-1.5 max-w-60 mx-auto leading-relaxed">
+            Convide amigos, dispute desafios com foto de prova e mantenha a ofensiva em grupo.
+          </p>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="grid grid-cols-2 gap-3">
         <button
@@ -231,18 +246,15 @@ export function SquadListClient({ squads }: { squads: SquadWithMeta[] }) {
       </div>
 
       {/* Squad list */}
-      {squads.length === 0 ? (
-        <div className="py-12 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-surface-1 flex items-center justify-center mx-auto mb-4">
-            <UsersIcon className="w-8 h-8 text-zinc-700" />
-          </div>
-          <p className="text-sm font-semibold text-zinc-500">Nenhum squad ainda</p>
-          <p className="text-xs text-zinc-600 mt-1">
-            Crie um grupo ou entre com um código de convite.
-          </p>
-        </div>
-      ) : (
+      {squads.length > 0 && (
         <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+              <TrophyIcon className="w-3.5 h-3.5 text-primary" />
+              Meus Squads
+            </p>
+            <span className="text-xs font-semibold text-zinc-600 tabular-nums">{squads.length}</span>
+          </div>
           {squads.map((s) => (
             <SquadCard key={s.id} squad={s} />
           ))}

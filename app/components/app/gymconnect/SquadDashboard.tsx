@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   UsersIcon,
@@ -11,6 +11,7 @@ import {
   XMarkIcon,
   ClockIcon,
   CalendarDaysIcon,
+  CameraIcon,
   ShareIcon,
   TrashIcon,
   PlayCircleIcon,
@@ -20,12 +21,14 @@ import {
   FireIcon,
   BoltIcon,
   FlagIcon,
+  CheckBadgeIcon,
 } from "@heroicons/react/24/solid";
 import type {
   SquadDetail,
   SquadMember,
   FeedEntry,
   Challenge,
+  ChallengeParticipant,
   SharedWorkout,
   ChallengeType,
   StreakRescue,
@@ -33,6 +36,8 @@ import type {
 import {
   leaveSquad,
   createChallenge,
+  joinChallenge,
+  uploadChallengeProof,
   shareWorkout,
   removeSharedWorkout,
   getExercisesForPicker,
@@ -230,71 +235,251 @@ function FeedTab({ feed, currentUserId, squadCollectionIds }: { feed: FeedEntry[
 
 // ── Challenge Card ────────────────────────────────────────────────────────────
 
-function ChallengeCard({ challenge, memberCount }: { challenge: Challenge; memberCount: number }) {
+function ProofLightbox({
+  participant,
+  onClose,
+}: {
+  participant: ChallengeParticipant;
+  onClose: () => void;
+}) {
+  const name = participant.first_name ?? participant.full_name?.split(" ")[0] ?? "Aluno";
+  return (
+    <div
+      className="fixed inset-0 z-80 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white min-h-11 min-w-11 flex items-center justify-center"
+        aria-label="Fechar"
+      >
+        <XMarkIcon className="w-6 h-6" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={participant.proof_photo_url!}
+        alt={`Prova de ${name}`}
+        className="max-w-full max-h-[75vh] rounded-2xl object-contain"
+      />
+      <div className="flex items-center gap-2 mt-4">
+        <Avatar photo_url={participant.photo_url} name={name} size="sm" />
+        <div>
+          <p className="text-sm font-bold text-white">{name}</p>
+          {participant.proof_uploaded_at && (
+            <p className="text-[10px] text-zinc-500">Prova enviada {timeAgo(participant.proof_uploaded_at)}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChallengeCard({
+  challenge,
+  currentUserId,
+  squadId,
+}: {
+  challenge: Challenge;
+  currentUserId: string;
+  squadId: string;
+}) {
   const left = daysLeft(challenge.end_date);
   const typeLabel = CHALLENGE_LABELS[challenge.challenge_type];
   const unit = CHALLENGE_UNIT[challenge.challenge_type];
 
+  const [joinPending, startJoin] = useTransition();
+  const [uploadPending, startUpload] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<ChallengeParticipant | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const me = challenge.participants.find((p) => p.student_id === currentUserId);
+  const isParticipant = !!me;
+  const proofs = challenge.participants.filter((p) => p.proof_photo_url);
+
   const typeIcons: Record<ChallengeType, React.ReactNode> = {
-    frequency: <CalendarDaysIcon className="w-4 h-4" />,
-    volume: <BoltIcon className="w-4 h-4" />,
-    max_weight: <TrophyIcon className="w-4 h-4" />,
+    frequency: <CalendarDaysIcon className="w-5 h-5" />,
+    volume: <BoltIcon className="w-5 h-5" />,
+    max_weight: <TrophyIcon className="w-5 h-5" />,
   };
 
+  function handleJoin() {
+    setError(null);
+    startJoin(async () => {
+      const res = await joinChallenge(challenge.id, squadId);
+      if (!res.ok) setError(res.message);
+    });
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    startUpload(async () => {
+      const fd = new FormData();
+      fd.set("challengeId", challenge.id);
+      fd.set("squadId", squadId);
+      fd.set("photo", file);
+      const res = await uploadChallengeProof(fd);
+      if (!res.ok) setError(res.message);
+    });
+  }
+
   return (
-    <div className="bg-surface-1 border border-white/8 rounded-2xl overflow-hidden">
-      {/* Header */}
-      <div className="p-4 pb-3">
+    <div className="bg-surface-1 border border-white/8 rounded-3xl overflow-hidden">
+      {/* Hero header */}
+      <div className="relative p-4 pb-3 bg-linear-to-br from-primary/12 via-surface-1 to-surface-1">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center text-primary shrink-0">
             {typeIcons[challenge.challenge_type]}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-white text-sm leading-snug">{challenge.title}</p>
+            <p className="font-black text-white leading-snug">{challenge.title}</p>
             <p className="text-[10px] text-zinc-500 mt-0.5">
               {typeLabel}{challenge.target_exercise_name ? ` · ${challenge.target_exercise_name}` : ""} · Meta: {challenge.target_value} {unit}
             </p>
           </div>
-          <div className="text-right shrink-0">
-            <p className={`text-xs font-bold tabular-nums ${left <= 2 ? "text-danger" : "text-zinc-400"}`}>{left}d</p>
-            <p className="text-[9px] text-zinc-600">restantes</p>
+          <div className={`shrink-0 px-2.5 py-1 rounded-full border text-center ${left <= 2 ? "bg-danger/10 border-danger/25" : "bg-surface-2 border-white/8"}`}>
+            <p className={`text-xs font-black tabular-nums leading-none ${left <= 2 ? "text-danger" : "text-zinc-300"}`}>{left}d</p>
+            <p className="text-[8px] text-zinc-600 mt-0.5">restantes</p>
           </div>
         </div>
         {challenge.description && (
-          <p className="text-xs text-zinc-500 mt-2 ml-12">{challenge.description}</p>
+          <p className="text-xs text-zinc-500 mt-2.5">{challenge.description}</p>
         )}
+
+        {/* Participants row */}
+        <div className="flex items-center gap-2 mt-3">
+          <div className="flex -space-x-1.5">
+            {challenge.participants.slice(0, 6).map((p) => (
+              <div key={p.student_id} className="ring-2 ring-surface-1 rounded-xl">
+                <Avatar
+                  photo_url={p.photo_url}
+                  name={p.first_name ?? p.full_name ?? "Aluno"}
+                  size="sm"
+                />
+              </div>
+            ))}
+          </div>
+          <span className="text-[10px] text-zinc-500">
+            {challenge.participants.length === 0
+              ? "Ninguém participando ainda"
+              : `${challenge.participants.length} participante${challenge.participants.length !== 1 ? "s" : ""}`}
+          </span>
+        </div>
       </div>
 
-      {/* Mini leaderboard */}
-      <div className="border-t border-white/5 divide-y divide-white/5">
-        {challenge.progress.slice(0, Math.min(memberCount, 4)).map((p, idx) => {
-          const pct = Math.min(100, challenge.target_value > 0 ? Math.round((p.value / challenge.target_value) * 100) : 0);
-          const name = p.first_name ?? p.full_name?.split(" ")[0] ?? "Aluno";
-          return (
-            <div key={p.student_id} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="w-5 text-center shrink-0">
-                {idx === 0 ? <TrophyIcon className="w-3.5 h-3.5 text-yellow-400 mx-auto" /> : <span className="text-[10px] text-zinc-600">{idx + 1}</span>}
-              </div>
-              <Avatar photo_url={p.photo_url} name={name} size="sm" />
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-zinc-300 truncate">{name}</span>
-                  <span className="text-xs font-bold text-white tabular-nums shrink-0">
-                    {challenge.challenge_type === "volume" ? p.value.toFixed(0) : p.value}{" "}
-                    <span className="text-zinc-600 font-normal text-[10px]">{unit}</span>
-                  </span>
-                </div>
-                <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-primary" : "bg-primary/50"}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
+      {/* Opt-in / participation controls */}
+      <div className="px-4 pb-3 space-y-2">
+        {!isParticipant ? (
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={joinPending}
+            className="w-full min-h-12 rounded-2xl bg-primary text-black font-black text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+          >
+            <FlagIcon className="w-4 h-4" />
+            {joinPending ? "Entrando..." : "Iniciar Desafio"}
+          </button>
+        ) : (
+          <div className="flex items-stretch gap-2">
+            <div className="flex-1 flex items-center gap-2 px-3 rounded-2xl bg-primary/10 border border-primary/20 min-h-12">
+              <CheckBadgeIcon className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-xs font-bold text-primary">Você está participando</span>
             </div>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadPending}
+              className="shrink-0 min-h-12 px-4 rounded-2xl bg-surface-2 border border-white/10 text-zinc-200 text-xs font-bold flex items-center gap-2 hover:border-primary/40 active:scale-[0.98] transition-all disabled:opacity-40"
+            >
+              <CameraIcon className="w-4 h-4" />
+              {uploadPending ? "Enviando..." : me?.proof_photo_url ? "Trocar Foto" : "Foto de Prova"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        )}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
+
+      {/* Leaderboard (participants only) */}
+      {challenge.progress.length > 0 && (
+        <div className="border-t border-white/5 divide-y divide-white/5">
+          {challenge.progress.slice(0, 5).map((p, idx) => {
+            const pct = Math.min(100, challenge.target_value > 0 ? Math.round((p.value / challenge.target_value) * 100) : 0);
+            const name = p.first_name ?? p.full_name?.split(" ")[0] ?? "Aluno";
+            const isMe = p.student_id === currentUserId;
+            return (
+              <div key={p.student_id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? "bg-primary/5" : ""}`}>
+                <div className="w-5 text-center shrink-0">
+                  {idx === 0 ? <TrophyIcon className="w-3.5 h-3.5 text-yellow-400 mx-auto" /> : <span className="text-[10px] text-zinc-600">{idx + 1}</span>}
+                </div>
+                <Avatar photo_url={p.photo_url} name={name} size="sm" />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-xs truncate ${isMe ? "font-bold text-white" : "text-zinc-300"}`}>
+                      {isMe ? "Você" : name}
+                    </span>
+                    <span className="text-xs font-bold text-white tabular-nums shrink-0">
+                      {challenge.challenge_type === "volume" ? p.value.toFixed(0) : p.value}{" "}
+                      <span className="text-zinc-600 font-normal text-[10px]">{unit}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? "bg-primary" : "bg-primary/50"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Proof gallery */}
+      {proofs.length > 0 && (
+        <div className="border-t border-white/5 p-4 pt-3">
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">
+            Provas enviadas
+          </p>
+          <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4">
+            {proofs.map((p) => {
+              const name = p.first_name ?? p.full_name?.split(" ")[0] ?? "Aluno";
+              return (
+                <button
+                  key={p.student_id}
+                  type="button"
+                  onClick={() => setLightbox(p)}
+                  className="relative shrink-0 w-20 h-24 rounded-2xl overflow-hidden border border-white/10 active:scale-[0.97] transition-transform"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p.proof_photo_url!}
+                    alt={`Prova de ${name}`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent px-1.5 pb-1 pt-4">
+                    <p className="text-[9px] font-bold text-white truncate">{name}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {lightbox && <ProofLightbox participant={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
@@ -432,12 +617,12 @@ function DesafiosTab({
   challenges,
   isCreator,
   squadId,
-  memberCount,
+  currentUserId,
 }: {
   challenges: Challenge[];
   isCreator: boolean;
   squadId: string;
-  memberCount: number;
+  currentUserId: string;
 }) {
   const [showCreate, setShowCreate] = useState(false);
 
@@ -460,7 +645,12 @@ function DesafiosTab({
       ) : (
         <div className="space-y-3">
           {challenges.map((c) => (
-            <ChallengeCard key={c.id} challenge={c} memberCount={memberCount} />
+            <ChallengeCard
+              key={c.id}
+              challenge={c}
+              currentUserId={currentUserId}
+              squadId={squadId}
+            />
           ))}
         </div>
       )}
@@ -891,51 +1081,64 @@ export function SquadDashboard({
 
   return (
     <div className="space-y-5">
-      {/* Header card */}
+      {/* Hero header */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
-        <div className="h-1 bg-linear-to-r from-primary via-primary/50 to-transparent" />
-        <div className="p-5">
+        <div className="relative p-5 bg-linear-to-br from-primary/15 via-surface-1 to-surface-1">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-black text-white leading-tight">{squad.name}</h1>
+              <p className="text-[10px] font-semibold text-primary uppercase tracking-widest">
+                Gym Connect · Squad
+              </p>
+              <h1 className="text-2xl font-black text-white leading-tight mt-0.5">{squad.name}</h1>
               {squad.description && <p className="text-sm text-zinc-500 mt-1">{squad.description}</p>}
             </div>
             {!isCreator && (
               <button type="button" onClick={handleLeave} disabled={pending} title="Sair do squad"
-                className="p-2 text-zinc-600 hover:text-danger transition-colors min-h-11 min-w-11 flex items-center justify-center">
+                className="p-2 text-zinc-600 hover:text-danger transition-colors min-h-11 min-w-11 flex items-center justify-center shrink-0">
                 <ArrowRightStartOnRectangleIcon className="w-5 h-5" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-4 mt-3 text-xs text-zinc-500">
-            <span className="flex items-center gap-1">
-              <UsersIcon className="w-3.5 h-3.5" />
-              {squad.members.length} membro{squad.members.length !== 1 ? "s" : ""}
-            </span>
+          {/* Members strip */}
+          <div className="flex items-center justify-between gap-3 mt-4">
+            <div className="flex items-center">
+              <div className="flex -space-x-2">
+                {squad.members.slice(0, 8).map((m) => (
+                  <div key={m.student_id} className="ring-2 ring-surface-1 rounded-xl">
+                    <Avatar photo_url={m.photo_url} name={displayName(m)} size="sm" />
+                  </div>
+                ))}
+              </div>
+              {squad.members.length > 8 && (
+                <span className="text-[10px] text-zinc-500 ml-2">+{squad.members.length - 8}</span>
+              )}
+            </div>
             <button type="button" onClick={copyCode}
-              className="flex items-center gap-1 hover:text-zinc-300 transition-colors font-mono">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-2/80 border border-white/8 text-xs font-mono text-zinc-300 hover:border-primary/30 transition-colors shrink-0">
               {copied ? <CheckIcon className="w-3.5 h-3.5 text-primary" /> : <ClipboardDocumentIcon className="w-3.5 h-3.5" />}
               {copied ? "Copiado!" : squad.invite_code}
             </button>
-            {squad.challenges.length > 0 && (
-              <span className="flex items-center gap-1 text-primary">
-                <FlagIcon className="w-3 h-3" />
-                {squad.challenges.length} desafio{squad.challenges.length !== 1 ? "s" : ""}
-              </span>
-            )}
           </div>
 
           {leaveError && <p className="text-xs text-danger mt-2">{leaveError}</p>}
+        </div>
 
-          <div className="flex items-center gap-1.5 mt-4">
-            {squad.members.slice(0, 8).map((m) => (
-              <Avatar key={m.student_id} photo_url={m.photo_url} name={displayName(m)} size="sm" />
-            ))}
-            {squad.members.length > 8 && (
-              <span className="text-[10px] text-zinc-600 ml-1">+{squad.members.length - 8}</span>
-            )}
-          </div>
+        {/* Stats row */}
+        <div className="grid grid-cols-3 divide-x divide-white/5 border-t border-white/5">
+          {[
+            { value: squad.members.length, label: squad.members.length === 1 ? "Membro" : "Membros", icon: <UsersIcon className="w-3.5 h-3.5" /> },
+            { value: squad.challenges.length, label: squad.challenges.length === 1 ? "Desafio" : "Desafios", icon: <FlagIcon className="w-3.5 h-3.5" /> },
+            { value: squad.sharedWorkouts.length, label: squad.sharedWorkouts.length === 1 ? "Treino" : "Treinos", icon: <FireIcon className="w-3.5 h-3.5" /> },
+          ].map((stat) => (
+            <div key={stat.label} className="flex flex-col items-center py-3 gap-0.5">
+              <div className="flex items-center gap-1.5 text-primary">
+                {stat.icon}
+                <span className="text-lg font-black text-white tabular-nums">{stat.value}</span>
+              </div>
+              <span className="text-[9px] text-zinc-600 uppercase tracking-wider">{stat.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -972,7 +1175,7 @@ export function SquadDashboard({
           challenges={squad.challenges}
           isCreator={isCreator}
           squadId={squad.id}
-          memberCount={squad.members.length}
+          currentUserId={currentUserId}
         />
       )}
       {tab === "treinos" && (

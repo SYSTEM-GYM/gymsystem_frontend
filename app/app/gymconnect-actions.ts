@@ -137,6 +137,99 @@ export async function createChallenge(input: {
   return { ok: true };
 }
 
+export async function joinChallenge(
+  challengeId: string,
+  squadId: string,
+): Promise<ActionResult> {
+  const user = await getAuthUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  // RLS (challenge_participants_join) verifies squad membership
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("challenge_participants")
+    .insert({ challenge_id: challengeId, student_id: user.id });
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, message: "Você já está participando deste desafio." };
+    if (error.code === "42501") return { ok: false, message: "Você precisa ser membro do squad para participar." };
+    console.error("joinChallenge:", error);
+    return { ok: false, message: "Erro ao entrar no desafio." };
+  }
+
+  revalidatePath(`/app/gymconnect/${squadId}`);
+  return { ok: true };
+}
+
+const PROOF_MAX_BYTES = 8 * 1024 * 1024;
+const PROOF_MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+export async function uploadChallengeProof(
+  formData: FormData,
+): Promise<ActionResult & { proofUrl?: string }> {
+  const user = await getAuthUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  const challengeId = formData.get("challengeId");
+  const squadId = formData.get("squadId");
+  const file = formData.get("photo");
+
+  if (typeof challengeId !== "string" || typeof squadId !== "string" || !(file instanceof File)) {
+    return { ok: false, message: "Envio inválido." };
+  }
+
+  const ext = PROOF_MIME_EXT[file.type];
+  if (!ext) return { ok: false, message: "Formato não suportado. Use JPG, PNG ou WebP." };
+  if (file.size === 0) return { ok: false, message: "Arquivo vazio." };
+  if (file.size > PROOF_MAX_BYTES) return { ok: false, message: "Foto muito grande (máx. 8 MB)." };
+
+  const supabase = await createClient();
+
+  // Must already be a participant (opt-in first, proof later)
+  const { data: participant } = await supabase
+    .from("challenge_participants")
+    .select("id")
+    .eq("challenge_id", challengeId)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  if (!participant) {
+    return { ok: false, message: "Entre no desafio antes de enviar a foto." };
+  }
+
+  // Path satisfies the {user_id}/ folder RLS rule on the bucket
+  const path = `${user.id}/${challengeId}-${Date.now()}.${ext}`;
+  const admin = createAdminClient();
+  const { error: uploadError } = await admin.storage
+    .from("challenge-proofs")
+    .upload(path, file, { contentType: file.type, upsert: true });
+
+  if (uploadError) {
+    console.error("uploadChallengeProof storage:", uploadError);
+    return { ok: false, message: "Erro ao enviar a foto. Tente novamente." };
+  }
+
+  const { data: pub } = admin.storage.from("challenge-proofs").getPublicUrl(path);
+  const proofUrl = pub.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from("challenge_participants")
+    .update({ proof_photo_url: proofUrl, proof_uploaded_at: new Date().toISOString() })
+    .eq("id", participant.id);
+
+  if (updateError) {
+    console.error("uploadChallengeProof update:", updateError);
+    return { ok: false, message: "Foto enviada, mas não foi possível registrá-la." };
+  }
+
+  revalidatePath(`/app/gymconnect/${squadId}`);
+  return { ok: true, proofUrl };
+}
+
 // ── Shared Workouts ───────────────────────────────────────────────────────────
 
 export async function shareWorkout(input: {
@@ -309,6 +402,16 @@ export type ChallengeProgress = {
   value: number;
 };
 
+export type ChallengeParticipant = {
+  student_id: string;
+  first_name: string | null;
+  full_name: string | null;
+  photo_url: string | null;
+  joined_at: string;
+  proof_photo_url: string | null;
+  proof_uploaded_at: string | null;
+};
+
 export type Challenge = {
   id: string;
   title: string;
@@ -319,7 +422,9 @@ export type Challenge = {
   target_exercise_name: string | null;
   end_date: string;
   created_at: string;
+  /** Progress of participants only — opt-in é explícito. */
   progress: ChallengeProgress[];
+  participants: ChallengeParticipant[];
 };
 
 export type SharedWorkout = {
@@ -500,6 +605,32 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
     }
   }
 
+  // Challenge participants (explicit opt-in)
+  const challengeIds = (challengeRows ?? []).map((c) => c.id);
+  const { data: participantRows } = challengeIds.length > 0
+    ? await admin
+        .from("challenge_participants")
+        .select("challenge_id, student_id, joined_at, proof_photo_url, proof_uploaded_at")
+        .in("challenge_id", challengeIds)
+        .order("joined_at", { ascending: true })
+    : { data: [] };
+
+  const participantsByChallenge = new Map<string, ChallengeParticipant[]>();
+  for (const p of participantRows ?? []) {
+    const profile = profileMap.get(p.student_id);
+    const list = participantsByChallenge.get(p.challenge_id) ?? [];
+    list.push({
+      student_id: p.student_id,
+      first_name: profile?.first_name ?? null,
+      full_name: profile?.full_name ?? null,
+      photo_url: profile?.photo_url ?? null,
+      joined_at: p.joined_at,
+      proof_photo_url: p.proof_photo_url ?? null,
+      proof_uploaded_at: p.proof_uploaded_at ?? null,
+    });
+    participantsByChallenge.set(p.challenge_id, list);
+  }
+
   // Fetch set_logs for challenge computation (all workout log ids)
   const workoutLogIds = (workoutLogs ?? []).map((l) => l.id);
   const { data: setLogs } = workoutLogIds.length > 0
@@ -516,6 +647,7 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
   const challenges: Challenge[] = (challengeRows ?? []).map((ch) => {
     const start = new Date(ch.created_at);
     const end = new Date(ch.end_date);
+    const participants = participantsByChallenge.get(ch.id) ?? [];
 
     // Workout logs within challenge timeframe
     const logsInRange = (workoutLogs ?? []).filter((l) => {
@@ -523,7 +655,9 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
       return d >= start && d <= end;
     });
 
-    const progress: ChallengeProgress[] = memberIds.map((sid) => {
+    // Leaderboard counts participants only — joining is an explicit action
+    const participantIds = participants.map((p) => p.student_id);
+    const progress: ChallengeProgress[] = participantIds.map((sid) => {
       let value = 0;
       const memberLogs = logsInRange.filter((l) => l.student_id === sid);
 
@@ -567,6 +701,7 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
       end_date: ch.end_date,
       created_at: ch.created_at,
       progress,
+      participants,
     };
   });
 
