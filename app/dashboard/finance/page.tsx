@@ -317,7 +317,7 @@ export default async function FinancePage({
                   <tr key={t.id} className="hover:bg-surface-2/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.type === "income" ? "bg-primary" : "bg-danger"}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.type === "income" ? "bg-primary" : "bg-danger"}`} />
                         <span className="text-zinc-300 font-medium">
                           {t.description || CATEGORY_LABELS[t.category] || t.category}
                         </span>
@@ -395,28 +395,28 @@ export default async function FinancePage({
         <Link href="/dashboard/finance/subscriptions" className="block group">
           <Card padding="md" className="h-full border-primary/10 hover:border-primary/30 transition-colors">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
                 <CreditCardIcon className="w-6 h-6 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white">Assinaturas & Faturas</p>
                 <p className="text-xs text-zinc-500 mt-0.5">MRR, inadimplência e controle de recorrência.</p>
               </div>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors flex-shrink-0" />
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
             </div>
           </Card>
         </Link>
         <Link href="/dashboard/finance/plans" className="block group">
           <Card padding="md" className="h-full border-white/5 hover:border-primary/20 transition-colors">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-800 flex items-center justify-center shrink-0">
                 <CreditCardIcon className="w-6 h-6 text-zinc-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white">Planos & Passes</p>
                 <p className="text-xs text-zinc-500 mt-0.5">Gerencie planos e passes avulsos.</p>
               </div>
-              <ArrowRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors flex-shrink-0" />
+              <ArrowRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
             </div>
           </Card>
         </Link>

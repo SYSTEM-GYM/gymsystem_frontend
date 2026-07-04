@@ -1,24 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   waBackendFetch,
   type WaIntegrationPublic,
 } from "@/lib/whatsapp/backend";
+import { requireAdmin as requireAdminRole } from "@/lib/auth-utils";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
 async function requireAdmin() {
-  const auth = await createClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) throw new Error("Não autorizado.");
-  const { data: p } = await auth.from("users").select("role").eq("id", user.id).single();
-  if (!p || p.role !== "admin") throw new Error("Permissão insuficiente.");
-  return { userId: user.id, admin: createAdminClient() };
+  const result = await requireAdminRole();
+  if (!result.ok) throw new Error(result.message);
+  return { userId: result.userId, admin: createAdminClient() };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────

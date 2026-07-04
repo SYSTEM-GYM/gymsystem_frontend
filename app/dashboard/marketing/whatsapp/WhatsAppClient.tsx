@@ -422,7 +422,7 @@ function InboxPane({
       <div
         className={`${
           showChat ? "hidden md:flex" : "flex"
-        } flex-col w-full md:w-80 border-r border-white/5 flex-shrink-0`}
+        } flex-col w-full md:w-80 border-r border-white/5 shrink-0`}
       >
         {/* Search + import */}
         <div className="p-3 border-b border-white/5 space-y-2">
@@ -469,7 +469,7 @@ function InboxPane({
               }`}
             >
               {/* Avatar */}
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
                 <span className="text-sm font-black text-primary uppercase">
                   {contactLabel(c).charAt(0)}
                 </span>
@@ -480,7 +480,7 @@ function InboxPane({
                     {contactLabel(c)}
                   </p>
                   {c.last_message_at && (
-                    <span className="text-[10px] text-zinc-600 flex-shrink-0">
+                    <span className="text-[10px] text-zinc-600 shrink-0">
                       {fmtDate(c.last_message_at)}
                     </span>
                   )}
@@ -490,7 +490,7 @@ function InboxPane({
                     {c.last_message ?? c.phone}
                   </p>
                   {c.unread_count > 0 && (
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-black text-[10px] font-black flex items-center justify-center">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-black text-[10px] font-black flex items-center justify-center">
                       {c.unread_count}
                     </span>
                   )}
@@ -653,14 +653,14 @@ function MessageThread({
   return (
     <>
       {/* Thread header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 shrink-0">
         <button
           onClick={onBack}
           className="md:hidden p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-surface-2"
         >
           ←
         </button>
-        <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
           <span className="text-sm font-black text-primary uppercase">
             {contactLabel(contact).charAt(0)}
           </span>
@@ -742,7 +742,7 @@ function MessageThread({
           {err}
         </p>
       )}
-      <div className="flex items-end gap-2 px-3 py-3 border-t border-white/5 flex-shrink-0">
+      <div className="flex items-end gap-2 px-3 py-3 border-t border-white/5 shrink-0">
         <textarea
           ref={inputRef}
           value={text}
@@ -756,7 +756,7 @@ function MessageThread({
         <button
           onClick={handleSend}
           disabled={!text.trim() || sending}
-          className="flex-shrink-0 w-11 h-11 rounded-2xl bg-primary text-black flex items-center justify-center disabled:opacity-40 hover:opacity-90 transition-opacity"
+          className="shrink-0 w-11 h-11 rounded-2xl bg-primary text-black flex items-center justify-center disabled:opacity-40 hover:opacity-90 transition-opacity"
         >
           <PaperAirplaneIcon className="w-5 h-5" />
         </button>
@@ -889,7 +889,7 @@ function AutomationsTab({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div
-                    className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                       automation.active ? "bg-primary/20" : "bg-surface-2"
                     }`}
                   >
@@ -908,7 +908,7 @@ function AutomationsTab({
                 {/* Toggle */}
                 <button
                   onClick={() => handleToggle(automation.id, !automation.active)}
-                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${
+                  className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${
                     automation.active ? "bg-primary" : "bg-zinc-700"
                   }`}
                   aria-label={automation.active ? "Desativar" : "Ativar"}
@@ -923,7 +923,7 @@ function AutomationsTab({
 
               {/* Template selector */}
               <div className="flex items-center gap-2">
-                <label className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold w-16 flex-shrink-0">
+                <label className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold w-16 shrink-0">
                   Template
                 </label>
                 <div className="relative flex-1">
@@ -946,7 +946,7 @@ function AutomationsTab({
                   <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none" />
                 </div>
                 {linkedTemplate && (
-                  <CheckSolidIcon className="w-4 h-4 text-primary flex-shrink-0" />
+                  <CheckSolidIcon className="w-4 h-4 text-primary shrink-0" />
                 )}
               </div>
             </div>
@@ -1229,7 +1229,7 @@ function BroadcastTab({
                     : "border-white/5 text-zinc-500 hover:text-white hover:border-white/10"
                 }`}
               >
-                {group === g && <CheckIcon className="w-4 h-4 flex-shrink-0" />}
+                {group === g && <CheckIcon className="w-4 h-4 shrink-0" />}
                 {GROUP_LABELS[g]}
               </button>
             ))}

@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MobileHeader } from "@/components/nav/MobileHeader";
 import { GymSelector } from "@/app/components/layout/GymSelector";
+import { getTenantBranding } from "@/lib/tenant-utils";
 
 export type UserRole = "admin" | "trainer" | "customer";
 
@@ -37,10 +39,24 @@ export default async function DashboardLayout({
     ownedGyms = gyms ?? [];
   }
 
+  // White-label branding — resolved from the subdomain slug the middleware
+  // injects. No slug (Master platform) falls back to the default "SIMP" name/logo.
+  const headersList = await headers();
+  const tenantSlug = headersList.get("x-tenant-slug");
+  const branding = tenantSlug ? await getTenantBranding(tenantSlug) : null;
+  const gymName = branding?.name ?? "SIMP";
+  const logoUrl = branding?.logoUrl ?? null;
+
   const header = (
     <>
       {/* Mobile slide-in drawer header */}
-      <MobileHeader role={role} gyms={ownedGyms} currentGymId={homeGymId} />
+      <MobileHeader
+        role={role}
+        gyms={ownedGyms}
+        currentGymId={homeGymId}
+        gymName={gymName}
+        logoUrl={logoUrl}
+      />
 
       {/* Desktop topbar — gym selector for admins */}
       {role === "admin" && ownedGyms.length > 0 && (
@@ -52,7 +68,7 @@ export default async function DashboardLayout({
   );
 
   return (
-    <DashboardShell role={role} header={header}>
+    <DashboardShell role={role} header={header} gymName={gymName} logoUrl={logoUrl}>
       <main className="flex-1 p-4 sm:p-6 lg:p-8">
         <div className="max-w-6xl mx-auto w-full">{children}</div>
       </main>

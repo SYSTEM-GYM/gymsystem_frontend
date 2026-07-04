@@ -121,7 +121,7 @@ export function FinancialCharts({ cashFlow, expensesByCategory, historicalMonths
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
               Últimos 6 meses
             </p>
-            <h2 className="text-base font-bold text-white">Fluxo de Caixa</h2>
+            <h2 className="font-bold text-white">Fluxo de Caixa</h2>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
@@ -181,7 +181,7 @@ export function FinancialCharts({ cashFlow, expensesByCategory, historicalMonths
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
               Mês atual
             </p>
-            <h2 className="text-base font-bold text-white">Despesas por Categoria</h2>
+            <h2 className="font-bold text-white">Despesas por Categoria</h2>
           </div>
 
           {!hasExpenses ? (
@@ -220,12 +220,12 @@ export function FinancialCharts({ cashFlow, expensesByCategory, historicalMonths
                   <li key={slice.category} className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 text-zinc-400 truncate">
                       <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }}
                       />
                       {slice.category}
                     </span>
-                    <span className="text-zinc-300 tabular-nums ml-2 flex-shrink-0">
+                    <span className="text-zinc-300 tabular-nums ml-2 shrink-0">
                       {formatBRLFull(slice.value)}
                     </span>
                   </li>
@@ -246,7 +246,7 @@ export function FinancialCharts({ cashFlow, expensesByCategory, historicalMonths
           <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
 
           <div className="flex items-start gap-3 relative">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
               <SparklesIcon className="w-4.5 h-4.5 text-primary" />
             </div>
             <div>

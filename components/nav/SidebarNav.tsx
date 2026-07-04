@@ -15,11 +15,15 @@ type Props = {
   role: UserRole;
   expanded?: boolean;
   onToggle?: () => void;
+  gymName?: string;
+  logoUrl?: string | null;
 };
 
-export function SidebarNav({ role, expanded = false, onToggle }: Props) {
+export function SidebarNav({ role, expanded = false, onToggle, gymName = "SIMP", logoUrl = null }: Props) {
   const pathname = usePathname();
   const navItems = getVisibleNavItems(role);
+  const initial = gymName.charAt(0).toUpperCase();
+  const rest = gymName.slice(1);
 
   function isActive(href: string, exact = false) {
     return exact ? pathname === href : pathname.startsWith(href);
@@ -49,17 +53,28 @@ export function SidebarNav({ role, expanded = false, onToggle }: Props) {
             expanded ? "gap-2" : "flex-col"
           }`}
         >
-          <span className="text-base font-black tracking-tighter text-primary leading-none">
-            S
-          </span>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={gymName}
+              className={expanded ? "h-6 w-6 rounded-lg object-cover shrink-0" : "h-7 w-7 rounded-lg object-cover shrink-0"}
+            />
+          ) : (
+            <span className="font-black tracking-tighter text-primary leading-none">
+              {initial}
+            </span>
+          )}
           {expanded ? (
-            <span className="text-sm font-black tracking-tighter text-white">
-              IMP
+            <span className="text-sm font-black tracking-tighter text-white truncate max-w-[120px]">
+              {logoUrl ? gymName : rest}
             </span>
           ) : (
-            <span className="text-[8px] text-zinc-600 uppercase tracking-widest mt-0.5">
-              IMP
-            </span>
+            !logoUrl && (
+              <span className="text-[8px] text-zinc-600 uppercase tracking-widest mt-0.5">
+                {rest}
+              </span>
+            )
           )}
         </div>
 
@@ -67,7 +82,7 @@ export function SidebarNav({ role, expanded = false, onToggle }: Props) {
           <button
             onClick={onToggle}
             aria-label={expanded ? "Recolher menu" : "Expandir menu"}
-            className="p-1.5 rounded-lg text-zinc-600 hover:text-white hover:bg-surface-2 transition-colors flex-shrink-0"
+            className="p-1.5 rounded-lg text-zinc-600 hover:text-white hover:bg-surface-2 transition-colors shrink-0"
           >
             {expanded ? (
               <ChevronLeftIcon className="w-4 h-4" />
@@ -94,7 +109,7 @@ export function SidebarNav({ role, expanded = false, onToggle }: Props) {
                 title={!expanded ? label : undefined}
                 className={itemCls(active)}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 shrink-0" />
                 {expanded && (
                   <span className="text-sm font-semibold whitespace-nowrap">
                     {label}
@@ -119,7 +134,7 @@ export function SidebarNav({ role, expanded = false, onToggle }: Props) {
                 : "w-11 h-11 justify-center rounded-2xl"
             } text-zinc-600 hover:bg-danger/10 hover:text-danger transition-all duration-200`}
           >
-            <ArrowLeftStartOnRectangleIcon className="w-5 h-5 flex-shrink-0" />
+            <ArrowLeftStartOnRectangleIcon className="w-5 h-5 shrink-0" />
             {expanded && (
               <span className="text-sm font-semibold">Sair</span>
             )}

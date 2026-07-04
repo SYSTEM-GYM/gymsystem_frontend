@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin as requireAdminRole } from "@/lib/auth-utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,16 +54,8 @@ export type InvoiceRow = {
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function requireAdmin(): Promise<{ ok: true } | { ok: false; message: string }> {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return { ok: false, message: "Não autorizado." };
-
-  const { data: profile } = await authClient
-    .from("users").select("role").eq("id", user.id).single();
-
-  if (!profile || profile.role !== "admin") {
-    return { ok: false, message: "Permissão insuficiente." };
-  }
+  const result = await requireAdminRole();
+  if (!result.ok) return { ok: false, message: result.message };
   return { ok: true };
 }
 

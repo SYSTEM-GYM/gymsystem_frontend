@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMySquads } from "@/app/app/gymconnect-actions";
 import { SquadListClient } from "@/app/components/app/gymconnect/SquadListClient";
-import { UsersIcon } from "@heroicons/react/24/outline";
 
 export const revalidate = 0;
 

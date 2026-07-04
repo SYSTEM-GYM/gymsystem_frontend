@@ -2,6 +2,7 @@
 
 import { Component, type ReactNode, useState, useTransition, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { MUSCLE_GROUP_LABELS } from "@/lib/exercise-utils";
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
@@ -303,7 +304,7 @@ function TabPersonal({
           </div>
           {(localStatus === "banned" || localStatus === "inactive") && (
             <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/20 rounded-2xl">
-              <ExclamationTriangleIcon className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
+              <ExclamationTriangleIcon className="w-4 h-4 text-danger shrink-0 mt-0.5" />
               <p className="text-xs text-danger">
                 {localStatus === "banned"
                   ? "Aluno banido não consegue acessar a plataforma nem a catraca."
@@ -442,7 +443,7 @@ function TabHealth({ student }: { student: StudentDetail }) {
                 }`}
               >
                 <span
-                  className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                  className={`w-4 h-4 rounded shrink-0 flex items-center justify-center border-2 transition-colors ${
                     checked ? "bg-primary border-primary" : "border-white/20"
                   }`}
                 >
@@ -614,7 +615,7 @@ function TabAssessments({
         <div className="py-12 flex flex-col items-center gap-3 text-center">
           <BeakerIcon className="w-10 h-10 text-zinc-700" />
           <p className="text-sm text-zinc-500">Nenhuma avaliação física registrada ainda.</p>
-          <p className="text-xs text-zinc-600">Clique em "Nova Avaliação" para começar o histórico.</p>
+          <p className="text-xs text-zinc-600">Clique em &ldquo;Nova Avaliação&rdquo; para começar o histórico.</p>
         </div>
       ) : (
         <div className="overflow-x-auto bg-surface-1 border border-white/5 rounded-3xl">
@@ -713,7 +714,7 @@ function TabAttendance({ logs }: { logs: OccupancyLog[] }) {
                 className="flex items-center justify-between px-4 py-3 bg-surface-2 rounded-2xl border border-white/5"
               >
                 <div className="flex items-center gap-3">
-                  <CalendarDaysIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+                  <CalendarDaysIcon className="w-4 h-4 text-zinc-600 shrink-0" />
                   <div>
                     <p className="text-sm text-white font-medium">{formatDatetime(log.validated_at)}</p>
                     <p className="text-xs text-zinc-600 mt-0.5 capitalize">{log.event_type}</p>
@@ -742,6 +743,21 @@ function extractYtId(url: string | null): string | null {
   return m?.[1] ?? null;
 }
 
+type ExerciseMedia =
+  | { kind: "youtube"; id: string }
+  | { kind: "video"; url: string }
+  | { kind: "none" };
+
+function getExerciseMedia(url: string | null): ExerciseMedia {
+  if (!url) return { kind: "none" };
+  const ytId = extractYtId(url);
+  if (ytId) return { kind: "youtube", id: ytId };
+  if (/\.(webm|mp4)(\?.*)?$/i.test(url) || url.includes("r2.dev") || url.includes(".r2.")) {
+    return { kind: "video", url };
+  }
+  return { kind: "none" };
+}
+
 type SheetRow = {
   uid: string;
   exercise_id: string;
@@ -759,51 +775,67 @@ type CustomSession = {
   rows: SheetRow[];
 };
 
-const MUSCLE_GROUP_LABELS: Record<string, string> = {
-  chest: "Peito",
-  back: "Costas",
-  shoulders: "Ombros",
-  biceps: "Bíceps",
-  triceps: "Tríceps",
-  legs: "Pernas",
-  glutes: "Glúteos",
-  core: "Core / Abdômen",
-  cardio: "Cardio",
-  full_body: "Corpo Inteiro",
-};
+const MUSCLE_GROUP_CATEGORIES: { value: string; label: string }[] = [
+  { value: "chest", label: "Peito" },
+  { value: "back", label: "Costas" },
+  { value: "shoulders", label: "Ombros" },
+  { value: "biceps", label: "Bíceps" },
+  { value: "triceps", label: "Tríceps" },
+  { value: "legs", label: "Pernas" },
+  { value: "glutes", label: "Glúteos" },
+  { value: "core", label: "Core" },
+  { value: "cardio", label: "Cardio" },
+  { value: "full_body", label: "Corpo Inteiro" },
+];
 
-function ExerciseSearchModal({
+function VisualExerciseLibraryModal({
   open,
-  onSelect,
+  onAdd,
   onClose,
 }: {
   open: boolean;
-  onSelect: (ex: ExerciseSearchResult) => void;
+  onAdd: (exercises: ExerciseSearchResult[]) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
   const [results, setResults] = useState<ExerciseSearchResult[]>([]);
+  const [selected, setSelected] = useState<Map<string, ExerciseSearchResult>>(new Map());
   const [isPending, startSearch] = useTransition();
+  const [loaded, setLoaded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Render-phase reset on open (avoids an effect-based setState cascade)
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setQuery("");
+      setCategory(null);
+      setResults([]);
+      setSelected(new Map());
+      setLoaded(false);
+    }
+  }
 
   useEffect(() => {
     if (open) {
-      setQuery("");
-      setResults([]);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      const t = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
     }
   }, [open]);
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return; }
+    if (!open) return;
     const t = setTimeout(() => {
       startSearch(async () => {
-        const res = await searchExercises(query);
+        const res = await searchExercises(query, category);
         if (res.ok) setResults(res.exercises);
+        setLoaded(true);
       });
-    }, 280);
+    }, query.length >= 2 ? 280 : 0);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [open, query, category]);
 
   useEffect(() => {
     if (!open) return;
@@ -814,100 +846,186 @@ function ExerciseSearchModal({
 
   if (!open) return null;
 
-  const showSpinner = isPending && query.length >= 2;
-  const showEmpty   = !isPending && query.length >= 2 && results.length === 0;
+  const showSpinner = isPending && !loaded;
+  const showEmpty   = loaded && !isPending && results.length === 0;
+
+  function toggle(ex: ExerciseSearchResult) {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(ex.id)) next.delete(ex.id);
+      else next.set(ex.id, ex);
+      return next;
+    });
+  }
+
+  function handleAdd() {
+    if (selected.size === 0) return;
+    onAdd(Array.from(selected.values()));
+    onClose();
+  }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-lg bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl flex flex-col max-h-[80vh]">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/8 flex-shrink-0">
-          <div className="relative flex-1">
-            <input
-              ref={inputRef}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar exercício (ex: supino, agachamento, peito...)"
-              className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-            />
-            {showSpinner && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">···</span>
-            )}
+      <div className="w-full sm:max-w-3xl h-[92vh] sm:h-auto sm:max-h-[85vh] bg-zinc-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Sticky header */}
+        <div className="shrink-0 bg-zinc-900/95 backdrop-blur-sm border-b border-white/8 z-10">
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="relative flex-1">
+              <input
+                ref={inputRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar exercício (ex: supino, agachamento, peito...)"
+                className="w-full bg-zinc-800 border border-white/10 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+              />
+              {showSpinner && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 animate-pulse">···</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-white/8 transition-colors shrink-0"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-white/8 transition-colors flex-shrink-0"
-          >
-            <XMarkIcon className="w-5 h-5" />
-          </button>
+
+          {/* Category chips */}
+          <div className="flex items-center gap-2 px-5 pb-3 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setCategory(null)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                category === null
+                  ? "bg-primary text-black"
+                  : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              Todos
+            </button>
+            {MUSCLE_GROUP_CATEGORIES.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setCategory((prev) => (prev === c.value ? null : c.value))}
+                className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                  category === c.value
+                    ? "bg-primary text-black"
+                    : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Scrollable results */}
-        <div className="overflow-y-auto flex-1">
+        {/* Scrollable visual grid */}
+        <div className="overflow-y-auto flex-1 px-5 py-4">
           {results.length > 0 && (
-            <ul className="divide-y divide-white/5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {results.map((ex) => {
-                const ytId = extractYtId(ex.youtube_url);
+                const media = getExerciseMedia(ex.youtube_url);
                 const displayName = ex.translated_name || ex.title;
                 const muscle = ex.muscle_group
                   ? (MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group)
                   : null;
-                const originalEn = ex.translated_name ? ex.title : null;
+                const isSelected = selected.has(ex.id);
 
                 return (
-                  <li key={ex.id}>
-                    <button
-                      type="button"
-                      onClick={() => { onSelect(ex); onClose(); }}
-                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/[0.05] active:bg-white/10 transition-colors text-left"
-                    >
-                      {ytId ? (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    onClick={() => toggle(ex)}
+                    className={`group relative flex flex-col rounded-2xl overflow-hidden border-2 transition-all text-left bg-zinc-800/60 ${
+                      isSelected
+                        ? "border-primary ring-2 ring-primary/40"
+                        : "border-white/8 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="relative aspect-video w-full bg-zinc-800">
+                      {media.kind === "youtube" ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
+                          src={`https://img.youtube.com/vi/${media.id}/mqdefault.jpg`}
                           alt={displayName}
-                          className="w-24 h-24 object-cover rounded-2xl flex-shrink-0 bg-zinc-800 border border-white/8"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : media.kind === "video" ? (
+                        <video
+                          src={media.url}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover bg-zinc-800"
                         />
                       ) : (
-                        <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-white/8 flex items-center justify-center flex-shrink-0">
+                        <div className="w-full h-full flex items-center justify-center">
                           <FilmIcon className="w-8 h-8 text-zinc-600" />
                         </div>
                       )}
-                      <div className="flex-1 min-w-0 flex flex-col gap-1">
-                        <p className="text-base font-bold text-white leading-snug">
-                          {displayName}
-                        </p>
-                        <p className="text-sm text-zinc-500">
-                          {[muscle, originalEn].filter(Boolean).join(" · ") || "Exercício"}
-                        </p>
+                      <div
+                        className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "bg-black/50 border-white/40 group-hover:border-white/70"
+                        }`}
+                      >
+                        {isSelected && <CheckIcon className="w-4 h-4 text-black" />}
                       </div>
-                    </button>
-                  </li>
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-primary/10" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-0.5 px-3 py-2.5">
+                      <p className="text-sm font-bold text-white leading-snug line-clamp-2">
+                        {displayName}
+                      </p>
+                      {muscle && (
+                        <p className="text-xs text-zinc-500">{muscle}</p>
+                      )}
+                    </div>
+                  </button>
                 );
               })}
-            </ul>
+            </div>
           )}
 
           {showEmpty && (
-            <div className="flex items-center gap-3 px-5 py-8">
-              <BeakerIcon className="w-5 h-5 text-zinc-600 flex-shrink-0" />
+            <div className="flex items-center gap-3 px-1 py-8">
+              <BeakerIcon className="w-5 h-5 text-zinc-600 shrink-0" />
               <p className="text-sm text-zinc-500">
-                Nenhum exercício encontrado para{" "}
-                <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>.
+                {query.length >= 2 ? (
+                  <>Nenhum exercício encontrado para{" "}
+                    <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>.</>
+                ) : (
+                  "Nenhum exercício encontrado nesta categoria."
+                )}
               </p>
             </div>
           )}
+        </div>
 
-          {!query && (
-            <div className="px-5 py-10 text-center">
-              <p className="text-sm text-zinc-600">Digite para buscar um exercício.</p>
-            </div>
-          )}
+        {/* Sticky footer action bar */}
+        <div className="shrink-0 flex items-center justify-between gap-4 px-5 py-4 border-t border-white/8 bg-zinc-900/95 backdrop-blur-sm">
+          <p className="text-sm text-zinc-400">
+            <span className="text-white font-bold">{selected.size}</span>{" "}
+            {selected.size === 1 ? "exercício selecionado" : "exercícios selecionados"}
+          </p>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={selected.size === 0}
+            className="px-5 py-2.5 rounded-xl text-sm font-bold bg-primary text-black hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            Adicionar à Ficha
+          </button>
         </div>
       </div>
     </div>
@@ -932,7 +1050,7 @@ function CustomWorkoutEditor({
   const activeSession = sessions[activeIdx];
 
   const cellInput =
-    "w-full bg-transparent border-0 text-sm text-white text-center tabular-nums focus:outline-none focus:bg-primary/5 focus:ring-1 focus:ring-primary/20 rounded-lg px-1 py-1.5 transition-colors min-h-[36px]";
+    "w-full bg-transparent border-0 text-sm text-white text-center tabular-nums focus:outline-none focus:bg-primary/5 focus:ring-1 focus:ring-primary/20 rounded-lg px-1 py-1.5 transition-colors min-h-9";
 
   function addSession() {
     if (sessions.length >= SESSION_LABELS.length) return;
@@ -965,8 +1083,8 @@ function CustomWorkoutEditor({
     );
   }
 
-  function addExercise(ex: ExerciseSearchResult) {
-    const newRow: SheetRow = {
+  function addExercises(exercises: ExerciseSearchResult[]) {
+    const newRows: SheetRow[] = exercises.map((ex) => ({
       uid: genId(),
       exercise_id: ex.id,
       exercise_title: ex.translated_name || ex.title,
@@ -976,10 +1094,10 @@ function CustomWorkoutEditor({
       weight: "",
       rest: "60",
       notes: "",
-    };
+    }));
     setSessions((prev) =>
       prev.map((s, i) =>
-        i !== activeIdx ? s : { ...s, rows: [...s.rows, newRow] },
+        i !== activeIdx ? s : { ...s, rows: [...s.rows, ...newRows] },
       ),
     );
   }
@@ -1025,7 +1143,7 @@ function CustomWorkoutEditor({
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
         >
           <CheckIcon className="w-3.5 h-3.5" />
           {saving ? "Salvando..." : "Salvar Ficha no Perfil"}
@@ -1119,21 +1237,30 @@ function CustomWorkoutEditor({
                 </tr>
               ) : (
                 activeSession.rows.map((row, idx) => {
-                  const ytId = extractYtId(row.youtube_url);
+                  const media = getExerciseMedia(row.youtube_url);
                   return (
                     <tr key={row.uid} className="hover:bg-white/[0.03] transition-colors group">
                       <td className="px-4 py-1.5 text-xs text-zinc-600 tabular-nums">{idx + 1}</td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-2">
-                          {ytId ? (
+                          {media.kind === "youtube" ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
+                              src={`https://img.youtube.com/vi/${media.id}/default.jpg`}
                               alt={row.exercise_title}
-                              className="w-8 h-8 object-cover rounded-lg flex-shrink-0 bg-zinc-800"
+                              className="w-8 h-8 object-cover rounded-lg shrink-0 bg-zinc-800"
+                            />
+                          ) : media.kind === "video" ? (
+                            <video
+                              src={media.url}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              className="w-8 h-8 object-cover rounded-lg shrink-0 bg-zinc-800"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-surface-1 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-surface-1 flex items-center justify-center shrink-0">
                               <FilmIcon className="w-3.5 h-3.5 text-zinc-700" />
                             </div>
                           )}
@@ -1221,10 +1348,10 @@ function CustomWorkoutEditor({
         Buscar Exercício
       </button>
 
-      {/* Search modal */}
-      <ExerciseSearchModal
+      {/* Visual exercise library modal */}
+      <VisualExerciseLibraryModal
         open={showSearch}
-        onSelect={(ex) => { addExercise(ex); setShowSearch(false); }}
+        onAdd={(exercises) => addExercises(exercises)}
         onClose={() => setShowSearch(false)}
       />
     </div>
@@ -1365,10 +1492,10 @@ export function SmartProfile({
           <img
             src={student.photo_url}
             alt={student.full_name}
-            className="w-20 h-20 rounded-2xl object-cover flex-shrink-0 ring-2 ring-white/10"
+            className="w-20 h-20 rounded-2xl object-cover shrink-0 ring-2 ring-white/10"
           />
         ) : (
-          <div className="w-20 h-20 rounded-2xl bg-surface-2 flex items-center justify-center text-3xl font-black text-zinc-500 flex-shrink-0 ring-2 ring-white/10">
+          <div className="w-20 h-20 rounded-2xl bg-surface-2 flex items-center justify-center text-3xl font-black text-zinc-500 shrink-0 ring-2 ring-white/10">
             {(student.full_name ?? "?").charAt(0).toUpperCase()}
           </div>
         )}
@@ -1400,7 +1527,7 @@ export function SmartProfile({
 
         {/* Quick physical stats from latest assessment */}
         {lastAssessment && (
-          <div className="flex gap-4 flex-shrink-0">
+          <div className="flex gap-4 shrink-0">
             {lastAssessment.weight != null && (
               <div className="flex flex-col items-center gap-0.5">
                 <ScaleIcon className="w-4 h-4 text-zinc-500" />
@@ -1439,7 +1566,7 @@ export function SmartProfile({
                 : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+            <Icon className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">{label}</span>
           </button>
         ))}

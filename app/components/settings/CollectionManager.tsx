@@ -79,7 +79,7 @@ function CreateCollectionModal({
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-surface-1 border border-white/10 rounded-3xl shadow-2xl">
           <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
-            <h3 className="text-base font-bold text-white">Nova Coleção</h3>
+            <h3 className="font-bold text-white">Nova Coleção</h3>
             <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white">
               <XMarkIcon className="w-5 h-5" />
             </button>
@@ -162,7 +162,7 @@ function DeleteCollectionModal({
             <TrashIcon className="w-6 h-6 text-danger" />
           </div>
           <div className="text-center space-y-1">
-            <h3 className="text-base font-bold text-white">Excluir Coleção</h3>
+            <h3 className="font-bold text-white">Excluir Coleção</h3>
             <p className="text-sm text-zinc-500">
               Tem certeza que deseja excluir{" "}
               <span className="text-white font-semibold">{collection.name}</span>?{" "}
@@ -283,7 +283,7 @@ function CollectionDetail({
           type="button"
           onClick={() => onDeleteRequest(collection)}
           title="Excluir coleção"
-          className="p-2 rounded-xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-colors flex-shrink-0"
+          className="p-2 rounded-xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-colors shrink-0"
         >
           <TrashIcon className="w-4 h-4" />
         </button>
@@ -302,7 +302,7 @@ function CollectionDetail({
               onDragEnd={handleDragEnd}
               className="flex items-center gap-3 p-3 bg-surface-2 rounded-xl cursor-grab active:cursor-grabbing"
             >
-              <Bars3Icon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+              <Bars3Icon className="w-4 h-4 text-zinc-600 shrink-0" />
               <span className="flex-1 text-sm text-white">{item.exercise.title}</span>
               <button
                 type="button"
@@ -374,7 +374,7 @@ export function CollectionManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-white">Coleções de Treino</h2>
+          <h2 className="font-bold text-white">Coleções de Treino</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
             Agrupe exercícios e monte fichas reutilizáveis.
           </p>

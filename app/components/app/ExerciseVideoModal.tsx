@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { FilmIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { resolveExerciseMedia } from "@/lib/exercise-utils";
 
 export type Exercise = {
   id: string;
@@ -12,6 +13,7 @@ export type Exercise = {
   youtube_url: string | null;
   webm_path: string | null;
   video_url: string | null;
+  muscle_group?: string | null;
 };
 
 type Props = {
@@ -19,23 +21,28 @@ type Props = {
   onClose: () => void;
 };
 
-function getYouTubeEmbedUrl(url: string): string {
-  const shortMatch = url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
-  const longMatch = url.match(/[?&]v=([A-Za-z0-9_-]{11})/);
-  const videoId = shortMatch?.[1] ?? longMatch?.[1];
-  return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
-}
+type MediaState = { id: string | null; load: boolean; failed: boolean };
 
 export function ExerciseVideoModal({ exercise, onClose }: Props) {
-  const [loadVideo, setLoadVideo] = useState(false);
+  const [media, setMedia] = useState<MediaState>({ id: null, load: false, failed: false });
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Render-phase reset when the opened exercise changes. Keyed by id — NOT by
+  // onClose/object identity: onClose gets a new identity on every parent
+  // re-render (ActiveWorkout re-renders each second for the elapsed timer),
+  // and the previous effect-based reset left the spinner stuck forever.
+  const exerciseId = exercise?.id ?? null;
+  if (media.id !== exerciseId) {
+    setMedia({ id: exerciseId, load: false, failed: false });
+  }
+
+  const loadVideo = media.id === exerciseId && media.load;
+  const mediaFailed = media.id === exerciseId && media.failed;
+  const markFailed = () => setMedia((s) => ({ ...s, failed: true }));
+
+  // Escape key handler
   useEffect(() => {
-    if (!exercise) {
-      setLoadVideo(false);
-      return;
-    }
-    setLoadVideo(false);
+    if (!exercise) return;
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
@@ -43,17 +50,21 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [exercise, onClose]);
 
+  // Lock body scroll and lazy-load media one frame after opening
   useEffect(() => {
-    if (exercise) {
-      document.body.style.overflow = "hidden";
-      const t = requestAnimationFrame(() => setLoadVideo(true));
-      return () => {
-        cancelAnimationFrame(t);
-        document.body.style.overflow = "";
-      };
+    if (!exerciseId) {
+      document.body.style.overflow = "";
+      return;
     }
-    document.body.style.overflow = "";
-  }, [exercise]);
+    document.body.style.overflow = "hidden";
+    const t = requestAnimationFrame(() =>
+      setMedia((s) => (s.id === exerciseId ? { ...s, load: true } : s)),
+    );
+    return () => {
+      cancelAnimationFrame(t);
+      document.body.style.overflow = "";
+    };
+  }, [exerciseId]);
 
   // Slow playback rate for WebM animations so beginners can follow the movement
   useEffect(() => {
@@ -66,10 +77,11 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
   if (!exercise) return null;
 
   const displayTitle = exercise.translated_name || exercise.title;
-  const hasYoutube = !!exercise.youtube_url;
-  // video_url (R2) takes priority over legacy webm_path
-  const webmSrc = exercise.video_url || exercise.webm_path || null;
-  const hasWebm = !!webmSrc;
+  // Resolves R2 direct video vs YouTube embed — including R2 URLs stored in
+  // youtube_url by the importer, which must play as <video>, not iframe.
+  const mediaSource = resolveExerciseMedia(exercise);
+  const hasYoutube = mediaSource.kind === "youtube";
+  const hasDirectVideo = mediaSource.kind === "video";
 
   return (
     <>
@@ -83,14 +95,14 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
           {/* Header */}
           <div className="flex items-start justify-between px-5 py-4 border-b border-white/5">
             <div>
-              <h3 className="text-base font-bold text-white">{displayTitle}</h3>
+              <h3 className="font-bold text-white">{displayTitle}</h3>
               {exercise.description && (
                 <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{exercise.description}</p>
               )}
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors flex-shrink-0 ml-3 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-1.5 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors shrink-0 ml-3 min-w-11 min-h-11 flex items-center justify-center"
               aria-label="Fechar"
             >
               <XMarkIcon className="w-5 h-5" />
@@ -98,11 +110,11 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
           </div>
 
           {/* Video */}
-          <div className="bg-black min-h-[200px]">
-            {hasYoutube && loadVideo && (
+          <div className="bg-black min-h-50">
+            {hasYoutube && mediaSource.kind === "youtube" && loadVideo && (
               <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
                 <iframe
-                  src={getYouTubeEmbedUrl(exercise.youtube_url!)}
+                  src={mediaSource.embedUrl}
                   className="absolute inset-0 w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
@@ -112,32 +124,37 @@ export function ExerciseVideoModal({ exercise, onClose }: Props) {
               </div>
             )}
 
-            {!hasYoutube && hasWebm && loadVideo && (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
+            {mediaSource.kind === "video" && loadVideo && !mediaFailed && (
               <video
                 ref={videoRef}
-                src={webmSrc!}
+                src={mediaSource.url}
                 autoPlay
                 loop
                 muted
                 playsInline
                 preload="none"
                 className="w-full"
+                onError={markFailed}
                 onLoadedMetadata={() => {
                   if (videoRef.current) videoRef.current.playbackRate = 0.35;
                 }}
               />
             )}
 
-            {!loadVideo && (hasYoutube || hasWebm) && (
+            {!loadVideo && !mediaFailed && (hasYoutube || hasDirectVideo) && (
               <div className="h-48 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             )}
 
-            {!hasYoutube && !hasWebm && (
-              <div className="h-40 flex items-center justify-center">
-                <p className="text-sm text-zinc-600">Nenhum vídeo disponível para este exercício.</p>
+            {(mediaFailed || (!hasYoutube && !hasDirectVideo)) && (
+              <div className="h-40 flex flex-col items-center justify-center gap-2">
+                <FilmIcon className="w-8 h-8 text-zinc-700" />
+                <p className="text-sm text-zinc-600">
+                  {mediaFailed
+                    ? "Não foi possível carregar o vídeo."
+                    : "Nenhum vídeo disponível para este exercício."}
+                </p>
               </div>
             )}
           </div>

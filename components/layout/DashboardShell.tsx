@@ -8,9 +8,11 @@ type Props = {
   role: UserRole;
   header: React.ReactNode;
   children: React.ReactNode;
+  gymName?: string;
+  logoUrl?: string | null;
 };
 
-export function DashboardShell({ role, header, children }: Props) {
+export function DashboardShell({ role, header, children, gymName, logoUrl }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -38,7 +40,13 @@ export function DashboardShell({ role, header, children }: Props) {
         className={`hidden lg:flex lg:flex-col bg-surface-1 border-r border-white/5 fixed inset-y-0 left-0 z-20 transition-all duration-300 overflow-hidden ${sidebarW}`}
         style={mounted ? undefined : { width: 72 }}
       >
-        <SidebarNav role={role} expanded={expanded} onToggle={toggle} />
+        <SidebarNav
+          role={role}
+          expanded={expanded}
+          onToggle={toggle}
+          gymName={gymName}
+          logoUrl={logoUrl}
+        />
       </aside>
 
       {/* Main content column — offset by sidebar */}

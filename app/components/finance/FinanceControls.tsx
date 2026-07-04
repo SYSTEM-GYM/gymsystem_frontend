@@ -133,7 +133,7 @@ function ExportDropdown({ transactions }: { transactions: ExportableTransaction[
             }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
           >
-            <ArrowDownTrayIcon className="w-4 h-4 flex-shrink-0" />
+            <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
             Baixar CSV
           </button>
           <div className="h-px bg-white/5 mx-3" />
@@ -145,7 +145,7 @@ function ExportDropdown({ transactions }: { transactions: ExportableTransaction[
             }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
           >
-            <PrinterIcon className="w-4 h-4 flex-shrink-0" />
+            <PrinterIcon className="w-4 h-4 shrink-0" />
             Imprimir / PDF
           </button>
         </div>
@@ -227,9 +227,9 @@ export function FinanceControls({ currentFilter, members, transactions }: Props)
           drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 shrink-0">
           <div>
-            <h2 className="text-base font-bold text-white">Novo Lançamento</h2>
+            <h2 className="font-bold text-white">Novo Lançamento</h2>
             <p className="text-xs text-zinc-500 mt-0.5">
               Registre uma receita ou despesa manualmente.
             </p>

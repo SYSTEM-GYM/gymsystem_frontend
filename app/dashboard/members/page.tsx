@@ -33,7 +33,7 @@ export default async function MembersPage() {
           <h1 className="text-2xl font-bold text-white tracking-tight">Membros</h1>
         </div>
         <div className="flex items-start gap-3 p-5 bg-yellow-500/10 border border-yellow-500/20 rounded-3xl">
-          <ExclamationTriangleIcon className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+          <ExclamationTriangleIcon className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
           <p className="text-sm text-yellow-300">
             Atenção: Você precisa cadastrar e vincular uma Filial ao seu perfil de Admin antes de
             gerenciar membros. Acesse{" "}
@@ -95,7 +95,7 @@ export default async function MembersPage() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <UsersIcon className="w-4 h-4 text-primary" />
           </div>
           <div>
@@ -104,7 +104,7 @@ export default async function MembersPage() {
           </div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <span className="w-2 h-2 rounded-full bg-primary" />
           </div>
           <div>
@@ -113,7 +113,7 @@ export default async function MembersPage() {
           </div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3 col-span-2 sm:col-span-1">
-          <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
             <span className="w-2 h-2 rounded-full bg-zinc-500" />
           </div>
           <div>

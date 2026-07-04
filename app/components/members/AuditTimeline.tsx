@@ -48,7 +48,7 @@ export function AuditTimeline({ logs }: { logs: AuditLogEntry[] }) {
     <ul className="space-y-3">
       {logs.map((log) => (
         <li key={log.id} className="flex gap-3">
-          <div className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center shrink-0">
             <ClockIcon className="w-4 h-4 text-zinc-500" />
           </div>
           <div className="flex-1 min-w-0 pb-3 border-b border-white/5 last:border-0">

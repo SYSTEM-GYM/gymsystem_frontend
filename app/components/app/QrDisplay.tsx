@@ -28,7 +28,7 @@ export function QrDisplay({ userId, firstName, isActive, gymName }: Props) {
       {/* Status banner */}
       {isActive ? (
         <div className="w-full flex items-center gap-3 px-4 py-3 bg-primary/10 border border-primary/20 rounded-2xl">
-          <CheckCircleIcon className="w-5 h-5 text-primary flex-shrink-0" />
+          <CheckCircleIcon className="w-5 h-5 text-primary shrink-0" />
           <div>
             <p className="text-sm font-semibold text-primary">Plano Ativo</p>
             <p className="text-xs text-zinc-400">{firstName}, seu acesso está liberado.</p>
@@ -36,7 +36,7 @@ export function QrDisplay({ userId, firstName, isActive, gymName }: Props) {
         </div>
       ) : (
         <div className="w-full flex items-center gap-3 px-4 py-3 bg-danger/10 border border-danger/20 rounded-2xl">
-          <ExclamationTriangleIcon className="w-5 h-5 text-danger flex-shrink-0" />
+          <ExclamationTriangleIcon className="w-5 h-5 text-danger shrink-0" />
           <div>
             <p className="text-sm font-semibold text-danger">Plano Inativo</p>
             <p className="text-xs text-zinc-400">Regularize sua situação na recepção.</p>
@@ -61,7 +61,7 @@ export function QrDisplay({ userId, firstName, isActive, gymName }: Props) {
       {/* Gym info */}
       {gymName ? (
         <div className="w-full flex items-center gap-3 px-4 py-3 bg-surface-1 border border-white/5 rounded-2xl">
-          <BuildingStorefrontIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+          <BuildingStorefrontIcon className="w-4 h-4 text-zinc-500 shrink-0" />
           <div>
             <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Sua filial</p>
             <p className="text-sm font-semibold text-white">{gymName}</p>
@@ -69,7 +69,7 @@ export function QrDisplay({ userId, firstName, isActive, gymName }: Props) {
         </div>
       ) : (
         <div className="w-full flex items-center gap-3 px-4 py-3 bg-surface-1 border border-white/5 rounded-2xl">
-          <BuildingStorefrontIcon className="w-4 h-4 text-zinc-600 flex-shrink-0" />
+          <BuildingStorefrontIcon className="w-4 h-4 text-zinc-600 shrink-0" />
           <p className="text-sm text-zinc-600">Nenhuma filial vinculada ao seu perfil.</p>
         </div>
       )}

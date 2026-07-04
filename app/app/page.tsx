@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { TodayWorkout } from "@/app/components/app/TodayWorkout";
+import { WorkoutShelf } from "@/app/components/app/WorkoutShelf";
 import { StreakWidget } from "@/app/components/app/StreakWidget";
 import { MuscleRadarChart } from "@/app/components/app/MuscleRadarChart";
-import { resolveTodayWorkout } from "@/lib/workout-utils";
+import { fetchStudentWorkouts } from "@/lib/workout-utils";
 import { getMuscleHeatmapData } from "@/app/app/workout-actions";
 import Link from "next/link";
 import { BookOpenIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
@@ -76,17 +76,23 @@ export default async function StudentHomePage() {
   const planLabel =
     planLabels[profile?.plan_type ?? ""] ?? (profile?.plan_type ?? "");
 
-  const [todayWorkout, muscleVolume] = await Promise.all([
-    resolveTodayWorkout(supabase, user.id),
+  const [workouts, muscleVolume] = await Promise.all([
+    fetchStudentWorkouts(supabase, user.id),
     getMuscleHeatmapData(),
   ]);
 
+  // Last logged weight/reps per exercise across every assigned session, so any
+  // card the student picks opens pre-filled.
   const lastLogs: Record<
     string,
     { weight_kg: number | null; reps_done: number | null }
   > = {};
-  if (todayWorkout && todayWorkout.exercises.length > 0) {
-    const exerciseIds = todayWorkout.exercises.map((e) => e.exercise_id);
+  const exerciseIds = [
+    ...new Set(
+      workouts.flatMap((w) => w.exercises.map((e) => e.exercise_id)),
+    ),
+  ];
+  if (exerciseIds.length > 0) {
     const { data: logs } = await supabase
       .from("workout_execution_logs")
       .select("exercise_id, weight_kg, reps_done, logged_at")
@@ -157,19 +163,8 @@ export default async function StudentHomePage() {
         lastWorkoutDate={lastWorkoutDate}
       />
 
-      {/* Today's Workout */}
-      {todayWorkout ? (
-        <TodayWorkout workout={todayWorkout} lastLogs={lastLogs} />
-      ) : (
-        <div className="p-6 bg-surface-1 border border-dashed border-white/10 rounded-3xl text-center">
-          <p className="text-sm font-semibold text-zinc-500">
-            Nenhum treino agendado para hoje
-          </p>
-          <p className="text-xs text-zinc-600 mt-1">
-            Peça ao seu personal para atribuir uma ficha de treino.
-          </p>
-        </div>
-      )}
+      {/* Workout Shelf — every assigned session, student picks freely */}
+      <WorkoutShelf workouts={workouts} lastLogs={lastLogs} />
 
       {/* Muscle Radar Chart */}
       <MuscleRadarChart volume={muscleVolume} />
@@ -179,7 +174,7 @@ export default async function StudentHomePage() {
         href="/app/library"
         className="flex items-center gap-3 p-4 bg-surface-1 border border-white/5 rounded-2xl hover:border-primary/20 transition-colors group"
       >
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <BookOpenIcon className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
@@ -188,7 +183,7 @@ export default async function StudentHomePage() {
             Vídeos, instruções e técnicas de todos os exercícios
           </p>
         </div>
-        <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors flex-shrink-0" />
+        <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
       </Link>
     </div>
   );

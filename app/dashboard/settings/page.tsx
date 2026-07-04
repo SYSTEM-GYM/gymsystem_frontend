@@ -37,8 +37,8 @@ export default async function SettingsPage({ searchParams }: Props) {
   let gyms: Gym[] = [];
   let exercises: Exercise[] = [];
   let collections: Collection[] = [];
-  let collectionExercises: Record<string, CollectionExerciseItem[]> = {};
-  let gymHours: Record<string, OperatingHour[]> = {};
+  const collectionExercises: Record<string, CollectionExerciseItem[]> = {};
+  const gymHours: Record<string, OperatingHour[]> = {};
 
   if (tab === "gyms" || tab === "collections") {
     const { data } = await admin
@@ -73,7 +73,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   if (tab === "exercises" || tab === "collections") {
     const { data } = await admin
       .from("exercises")
-      .select("id, title, translated_name, description, youtube_url, webm_path, video_url, created_at")
+      .select("id, title, translated_name, description, youtube_url, webm_path, video_url, muscle_group, created_at")
       .order("created_at", { ascending: false });
     exercises = (data ?? []) as Exercise[];
   }

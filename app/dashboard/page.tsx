@@ -75,7 +75,7 @@ export default async function DashboardPage() {
             <div>
               <p className="text-3xl font-bold text-primary">
                 {formattedXP}
-                <span className="text-base font-normal text-zinc-500 ml-1.5">
+                <span className="font-normal text-zinc-500 ml-1.5">
                   XP
                 </span>
               </p>
@@ -96,7 +96,7 @@ export default async function DashboardPage() {
             <div>
               <p className="text-3xl font-bold text-white">
                 —
-                <span className="text-base font-normal text-zinc-500 ml-1.5">
+                <span className="font-normal text-zinc-500 ml-1.5">
                   alunos
                 </span>
               </p>

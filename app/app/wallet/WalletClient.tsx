@@ -13,7 +13,6 @@ import {
   ShoppingCartIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { QRCodeGenerator } from "@/app/components/access/QRCodeGenerator";
 import { validateCoupon, processStudentCheckout } from "@/app/dashboard/finance/plans/actions";
 import type { WalletData, PlanOption, CouponValidation } from "./actions";
 
@@ -80,8 +79,8 @@ export function WalletClient({ wallet, plans }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Carteira & Acesso</h1>
-          <p className="text-sm text-zinc-500 mt-1">Seu passe digital e assinatura.</p>
+          <h1 className="text-2xl font-black text-white tracking-tight">Carteira</h1>
+          <p className="text-sm text-zinc-500 mt-1">Sua assinatura, passes e pagamentos.</p>
         </div>
         <button
           onClick={() => setShowCheckout(true)}
@@ -101,9 +100,9 @@ export function WalletClient({ wallet, plans }: Props) {
         }`}
       >
         {hasAccess ? (
-          <CheckCircleIcon className="w-6 h-6 text-primary flex-shrink-0" />
+          <CheckCircleIcon className="w-6 h-6 text-primary shrink-0" />
         ) : (
-          <XCircleIcon className="w-6 h-6 text-danger flex-shrink-0" />
+          <XCircleIcon className="w-6 h-6 text-danger shrink-0" />
         )}
         <div>
           <p className={`text-sm font-bold uppercase tracking-widest ${hasAccess ? "text-primary" : "text-danger"}`}>
@@ -119,11 +118,6 @@ export function WalletClient({ wallet, plans }: Props) {
         </div>
       </div>
 
-      {/* QR Code */}
-      <div className="flex flex-col items-center gap-4 py-2">
-        <QRCodeGenerator />
-      </div>
-
       {/* Subscription */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -135,7 +129,7 @@ export function WalletClient({ wallet, plans }: Props) {
           <div className="bg-surface-1 border border-white/5 rounded-2xl p-5 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-base font-bold text-white">{subscription.plan_name}</p>
+                <p className="font-bold text-white">{subscription.plan_name}</p>
                 <p className="text-sm text-zinc-500">
                   {CYCLE_LABELS[subscription.billing_cycle]} · {fmt(subscription.plan_price)}
                 </p>
@@ -208,7 +202,7 @@ export function WalletClient({ wallet, plans }: Props) {
             {dailyPasses.map((pass) => (
               <div key={pass.id} className="bg-surface-1 border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <CalendarDaysIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                  <CalendarDaysIcon className="w-4 h-4 text-zinc-500 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-zinc-200">{fmtDate(pass.valid_for_date)}</p>
                     {pass.valid_for_date === today && (
@@ -313,7 +307,7 @@ function CheckoutModal({
       <div className="bg-surface-1 border border-white/8 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
         {/* Modal header */}
         <div className="sticky top-0 bg-surface-1 flex items-center justify-between px-5 py-4 border-b border-white/5">
-          <h2 className="text-base font-bold text-white">
+          <h2 className="font-bold text-white">
             {step === "success" ? "Parabéns!" : step === "error" ? "Erro" : "Comprar"}
           </h2>
           <button onClick={onClose} className="p-1.5 rounded-xl text-zinc-500 hover:text-white">

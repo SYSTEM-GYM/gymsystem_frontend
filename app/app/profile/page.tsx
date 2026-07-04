@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/auth/actions";
 import { ArrowLeftStartOnRectangleIcon, UserCircleIcon } from "@heroicons/react/24/outline";
+import { ProfileEditForm } from "./ProfileEditForm";
 
 export default async function StudentProfilePage() {
   const supabase = await createClient();
@@ -10,9 +11,12 @@ export default async function StudentProfilePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // NOTE: e-mail lives only in auth.users (user.email) — public.users has no
+  // email column, and selecting one here made PostgREST reject the whole
+  // query, blanking the entire profile.
   const { data: profile } = await supabase
     .from("users")
-    .select("first_name, last_name, full_name, photo_url, plan_type, email, phone, created_at, home_gym_id")
+    .select("first_name, last_name, full_name, photo_url, plan_type, phone, created_at, home_gym_id")
     .eq("id", user.id)
     .single();
 
@@ -30,8 +34,6 @@ export default async function StudentProfilePage() {
   }
 
   const infoRows = [
-    { label: "E-mail",      value: user.email ?? "—" },
-    { label: "Telefone",    value: profile?.phone ?? "—" },
     { label: "Plano",       value: plan },
     ...(gymName ? [{ label: "Filial",  value: gymName }] : []),
     { label: "Membro desde", value: profile?.created_at
@@ -53,10 +55,10 @@ export default async function StudentProfilePage() {
           <img
             src={profile.photo_url}
             alt={profile.full_name ?? ""}
-            className="w-16 h-16 rounded-2xl object-cover flex-shrink-0"
+            className="w-16 h-16 rounded-2xl object-cover shrink-0"
           />
         ) : (
-          <div className="w-16 h-16 rounded-2xl bg-surface-2 flex items-center justify-center flex-shrink-0">
+          <div className="w-16 h-16 rounded-2xl bg-surface-2 flex items-center justify-center shrink-0">
             <UserCircleIcon className="w-8 h-8 text-zinc-600" />
           </div>
         )}
@@ -66,7 +68,13 @@ export default async function StudentProfilePage() {
         </div>
       </div>
 
-      {/* Info */}
+      {/* Editable contact data */}
+      <ProfileEditForm
+        initialEmail={user.email ?? ""}
+        initialPhone={profile?.phone ?? ""}
+      />
+
+      {/* Read-only membership info */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
         <dl>
           {infoRows.map(({ label, value }, i) => (

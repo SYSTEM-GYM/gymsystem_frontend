@@ -16,7 +16,7 @@ export default async function LibraryPage() {
   const { data: exercises } = await supabase
     .from("exercises")
     .select(
-      "id, title, translated_name, description, instructions, youtube_url, webm_path, video_url",
+      "id, title, translated_name, description, instructions, youtube_url, webm_path, video_url, muscle_group",
     )
     .order("title")
     .returns<Exercise[]>();
@@ -24,7 +24,7 @@ export default async function LibraryPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
           <BookOpenIcon className="w-5 h-5 text-primary" />
         </div>
         <div>

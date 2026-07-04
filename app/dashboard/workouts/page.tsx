@@ -94,7 +94,7 @@ export default async function WorkoutsPage() {
               className="bg-surface-1 border border-white/5 rounded-3xl p-5 flex flex-col gap-3 hover:border-white/10 transition-colors"
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
                   <ClipboardDocumentListIcon className="w-5 h-5 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">

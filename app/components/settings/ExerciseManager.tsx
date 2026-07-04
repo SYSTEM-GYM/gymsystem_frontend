@@ -18,6 +18,7 @@ import {
   syncExercisesFromCloudflare,
   type SettingsActionState,
 } from "@/app/dashboard/settings/actions";
+import { muscleGroupLabel, resolveExerciseMedia } from "@/lib/exercise-utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export type Exercise = {
   youtube_url: string | null;
   webm_path: string | null;
   video_url: string | null;
+  muscle_group: string | null;
   created_at: string;
 };
 
@@ -84,7 +86,7 @@ function CreateExerciseModal({ onClose }: { onClose: () => void }) {
         <div className="w-full max-w-lg bg-surface-1 border border-white/10 rounded-3xl shadow-2xl my-4">
           <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
             <div>
-              <h3 className="text-base font-bold text-white">Novo Exercício</h3>
+              <h3 className="font-bold text-white">Novo Exercício</h3>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Adicione um exercício à biblioteca compartilhada.
               </p>
@@ -245,7 +247,7 @@ function DeleteConfirmModal({
             <TrashIcon className="w-6 h-6 text-danger" />
           </div>
           <div className="text-center space-y-1">
-            <h3 className="text-base font-bold text-white">Excluir Exercício</h3>
+            <h3 className="font-bold text-white">Excluir Exercício</h3>
             <p className="text-sm text-zinc-500">
               Tem certeza que deseja excluir{" "}
               <span className="text-white font-semibold">{exercise.title}</span>? Esta ação não pode ser desfeita.
@@ -283,10 +285,11 @@ function DeleteConfirmModal({
 // ── Exercise Card ─────────────────────────────────────────────────────────────
 
 function ExerciseVideoPreview({ exercise }: { exercise: Exercise }) {
-  if (exercise.video_url) {
+  const media = resolveExerciseMedia(exercise);
+  if (media.kind === "video") {
     return (
       <video
-        src={exercise.video_url}
+        src={media.url}
         autoPlay
         muted
         loop
@@ -295,21 +298,15 @@ function ExerciseVideoPreview({ exercise }: { exercise: Exercise }) {
       />
     );
   }
-  if (exercise.youtube_url) {
-    const m =
-      exercise.youtube_url.match(/youtube\.com\/watch\?v=([^&]+)/) ??
-      exercise.youtube_url.match(/youtu\.be\/([^?]+)/);
-    const ytId = m?.[1];
-    if (ytId) {
-      return (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`}
-          alt={exercise.title}
-          className="w-full h-32 object-cover rounded-xl"
-        />
-      );
-    }
+  if (media.kind === "youtube") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={media.thumbUrl}
+        alt={exercise.translated_name || exercise.title}
+        className="w-full h-32 object-cover rounded-xl"
+      />
+    );
   }
   return null;
 }
@@ -349,7 +346,7 @@ function ExerciseCard({
         {/* Icon badge (shown only when no video preview) */}
         {!preview && (
           <div
-            className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${
+            className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center ${
               hasVideo ? "bg-primary/10" : "bg-zinc-800"
             }`}
           >
@@ -370,7 +367,12 @@ function ExerciseCard({
               {exercise.description}
             </p>
           )}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {muscleGroupLabel(exercise.muscle_group) && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-2 text-zinc-400 border border-white/5">
+                {muscleGroupLabel(exercise.muscle_group)}
+              </span>
+            )}
             {videoLabel && !preview ? (
               <span className="text-xs text-primary font-medium">{videoLabel}</span>
             ) : !hasVideo ? (
@@ -383,7 +385,7 @@ function ExerciseCard({
         </div>
 
         {/* Actions */}
-        <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <div className="flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button
             type="button"
             onClick={() => onDelete(exercise)}
@@ -400,7 +402,7 @@ function ExerciseCard({
 
 // ── Action Buttons ────────────────────────────────────────────────────────────
 
-function R2SyncButton() {
+function R2SyncButton({ compact = false }: { compact?: boolean }) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -410,10 +412,31 @@ function R2SyncButton() {
       const res = await syncExercisesFromCloudflare();
       setResult(
         res.ok
-          ? { ok: true, message: `${res.count} exercícios sincronizados do Cloudflare R2!` }
+          ? { ok: true, message: `${res.count} exercícios sincronizados!` }
           : { ok: false, message: res.error },
       );
     });
+  }
+
+  if (compact) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={handleSync}
+          disabled={isPending}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-zinc-800 border border-white/10 text-zinc-200 hover:bg-zinc-700 hover:border-white/20 active:scale-95 transition-all disabled:opacity-50"
+        >
+          <SparklesIcon className="w-4 h-4 text-primary" />
+          {isPending ? "Sincronizando..." : "☁️ Sincronizar R2"}
+        </button>
+        {result && (
+          <p className={`text-[11px] ${result.ok ? "text-primary" : "text-danger"}`}>
+            {result.message}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -453,14 +476,21 @@ function SeedExercisesButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleSeed}
-      disabled={isPending}
-      className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
-    >
-      {isPending ? "Adicionando..." : "Ou adicionar 35 exercícios padrão"}
-    </button>
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={handleSeed}
+        disabled={isPending}
+        className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
+      >
+        {isPending ? "Adicionando..." : "Ou adicionar 35 exercícios padrão"}
+      </button>
+      {result && (
+        <p className={`text-xs ${result.ok ? "text-primary" : "text-danger"}`}>
+          {result.message}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -472,20 +502,23 @@ export function ExerciseManager({ initialExercises }: Props) {
 
   return (
     <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
+      <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-white/5 flex-wrap">
         <div>
-          <h2 className="text-base font-bold text-white">Biblioteca de Exercícios</h2>
+          <h2 className="font-bold text-white">Biblioteca de Exercícios</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
             Exercícios disponíveis para montagem de treinos.
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform"
-        >
-          <PlusIcon className="w-4 h-4" />
-          Novo Exercício
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <R2SyncButton compact />
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Novo Exercício
+          </button>
+        </div>
       </div>
 
       {initialExercises.length === 0 ? (
@@ -496,10 +529,9 @@ export function ExerciseManager({ initialExercises }: Props) {
           <div className="space-y-1">
             <p className="text-sm font-semibold text-zinc-400">Biblioteca de exercícios vazia</p>
             <p className="text-xs text-zinc-600 max-w-xs">
-              Popule instantaneamente com 35 exercícios essenciais já traduzidos para pt-BR, ou adicione manualmente.
+              Sincronize com o Cloudflare R2 para restaurar todos os exercícios, ou adicione manualmente.
             </p>
           </div>
-          <R2SyncButton />
           <SeedExercisesButton />
         </div>
       ) : (

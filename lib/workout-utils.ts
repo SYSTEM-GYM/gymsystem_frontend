@@ -33,85 +33,84 @@ export function dayLabel(day: number): string {
   return DAY_LABELS[day] ?? String(day);
 }
 
-/** Resolves today's workout collection for a user (mirrors backend logic). */
-export async function resolveTodayWorkout(
-  supabase: {
-    from: (table: string) => ReturnType<
-      import("@supabase/supabase-js").SupabaseClient["from"]
-    >;
-  },
+export type StudentWorkoutItem = TodayWorkoutData & {
+  /** True for the session the old "Treino de Hoje" logic would have picked. */
+  suggestedToday: boolean;
+};
+
+type SupabaseLike = {
+  from: (table: string) => ReturnType<
+    import("@supabase/supabase-js").SupabaseClient["from"]
+  >;
+};
+
+/**
+ * Fetches every workout session assigned to the student (A, B, C…), in
+ * schedule order, marking which one would be today's suggestion (weekly match
+ * → session rotation → first). The student picks freely from the shelf.
+ */
+export async function fetchStudentWorkouts(
+  supabase: SupabaseLike,
   userId: string,
-): Promise<TodayWorkoutData | null> {
-  const dayOfWeek = new Date().getDay();
-
-  const { data: weeklySchedule } = await supabase
+): Promise<StudentWorkoutItem[]> {
+  const { data: schedules } = await supabase
     .from("workout_schedules")
-    .select("collection_id, schedule_type")
+    .select("collection_id, schedule_type, day_of_week, sort_order")
     .eq("user_id", userId)
-    .eq("schedule_type", "weekly")
-    .eq("day_of_week", dayOfWeek)
-    .order("sort_order", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("sort_order", { ascending: true });
 
-  let collectionId = weeklySchedule?.collection_id ?? null;
-  let scheduleType = weeklySchedule?.schedule_type ?? "session";
+  type ScheduleRow = {
+    collection_id: string;
+    schedule_type: string;
+    day_of_week: number | null;
+    sort_order: number;
+  };
+  const allSchedules = (schedules ?? []) as ScheduleRow[];
+  if (allSchedules.length === 0) return [];
 
-  if (!collectionId) {
-    const { data: sessionSchedules } = await supabase
-      .from("workout_schedules")
-      .select("collection_id")
-      .eq("user_id", userId)
-      .eq("schedule_type", "session")
-      .order("sort_order", { ascending: true });
+  // Dedupe collections preserving schedule order
+  const collectionIds: string[] = [];
+  for (const s of allSchedules) {
+    if (!collectionIds.includes(s.collection_id)) collectionIds.push(s.collection_id);
+  }
 
-    if (sessionSchedules && sessionSchedules.length > 0) {
+  // Suggestion mirrors the legacy resolveTodayWorkout fallback chain
+  const dayOfWeek = new Date().getDay();
+  let suggestedId =
+    allSchedules.find(
+      (s) => s.schedule_type === "weekly" && s.day_of_week === dayOfWeek,
+    )?.collection_id ?? null;
+
+  if (!suggestedId) {
+    const sessionSchedules = allSchedules.filter((s) => s.schedule_type === "session");
+    if (sessionSchedules.length > 0) {
       const { count } = await supabase
         .from("workout_execution_logs")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId);
-
-      const idx = (count ?? 0) % sessionSchedules.length;
-      collectionId = sessionSchedules[idx].collection_id;
-      scheduleType = "session";
+      suggestedId = sessionSchedules[(count ?? 0) % sessionSchedules.length].collection_id;
     }
   }
+  if (!suggestedId) suggestedId = collectionIds[0];
 
-  if (!collectionId) {
-    const { data: customSchedule } = await supabase
-      .from("workout_schedules")
-      .select("collection_id")
-      .eq("user_id", userId)
-      .eq("schedule_type", "custom")
-      .order("sort_order", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    collectionId = customSchedule?.collection_id ?? null;
-    scheduleType = "custom";
-  }
-
-  if (!collectionId) return null;
-
-  const { data: collection } = await supabase
-    .from("exercise_collections")
-    .select("id, name, estimated_duration_minutes")
-    .eq("id", collectionId)
-    .single();
-
-  if (!collection) return null;
-
-  const { data: rows } = await supabase
-    .from("collection_exercises")
-    .select(
-      `id, exercise_id, sort_order, default_sets, default_reps, default_weight_kg,
-       exercise:exercises(id, title, translated_name, description, instructions, youtube_url, webm_path, video_url)`,
-    )
-    .eq("collection_id", collectionId)
-    .order("sort_order", { ascending: true });
+  const [{ data: collections }, { data: rows }] = await Promise.all([
+    supabase
+      .from("exercise_collections")
+      .select("id, name, estimated_duration_minutes")
+      .in("id", collectionIds),
+    supabase
+      .from("collection_exercises")
+      .select(
+        `id, collection_id, exercise_id, sort_order, default_sets, default_reps, default_weight_kg,
+         exercise:exercises(id, title, translated_name, description, instructions, youtube_url, webm_path, video_url)`,
+      )
+      .in("collection_id", collectionIds)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   type RawRow = {
     id: string;
+    collection_id: string;
     exercise_id: string;
     sort_order: number;
     default_sets: number;
@@ -120,27 +119,42 @@ export async function resolveTodayWorkout(
     exercise: CollectionExerciseRow["exercise"] | CollectionExerciseRow["exercise"][];
   };
 
-  const exercises: CollectionExerciseRow[] = ((rows ?? []) as RawRow[])
-    .map((r) => {
-      const ex = Array.isArray(r.exercise) ? r.exercise[0] : r.exercise;
-      if (!ex) return null;
+  const exercisesByCollection: Record<string, CollectionExerciseRow[]> = {};
+  for (const r of (rows ?? []) as RawRow[]) {
+    const ex = Array.isArray(r.exercise) ? r.exercise[0] : r.exercise;
+    if (!ex) continue;
+    (exercisesByCollection[r.collection_id] ??= []).push({
+      id: r.id,
+      exercise_id: r.exercise_id,
+      sort_order: r.sort_order,
+      default_sets: r.default_sets,
+      default_reps: r.default_reps,
+      default_weight_kg: r.default_weight_kg,
+      exercise: ex,
+    });
+  }
+
+  type CollectionRow = { id: string; name: string; estimated_duration_minutes: number };
+  const collectionById = new Map(
+    ((collections ?? []) as CollectionRow[]).map((c) => [c.id, c]),
+  );
+
+  const scheduleTypeByCollection = new Map(
+    allSchedules.map((s) => [s.collection_id, s.schedule_type] as const),
+  );
+
+  return collectionIds
+    .map((id) => {
+      const collection = collectionById.get(id);
+      if (!collection) return null;
       return {
-        id: r.id,
-        exercise_id: r.exercise_id,
-        sort_order: r.sort_order,
-        default_sets: r.default_sets,
-        default_reps: r.default_reps,
-        default_weight_kg: r.default_weight_kg,
-        exercise: ex,
+        collectionId: collection.id,
+        collectionName: collection.name,
+        estimatedDurationMinutes: collection.estimated_duration_minutes,
+        scheduleType: scheduleTypeByCollection.get(id) ?? "session",
+        exercises: exercisesByCollection[id] ?? [],
+        suggestedToday: id === suggestedId,
       };
     })
-    .filter((e): e is CollectionExerciseRow => e !== null);
-
-  return {
-    collectionId: collection.id,
-    collectionName: collection.name,
-    estimatedDurationMinutes: collection.estimated_duration_minutes,
-    scheduleType,
-    exercises,
-  };
+    .filter((w): w is StudentWorkoutItem => w !== null);
 }

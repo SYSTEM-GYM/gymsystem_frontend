@@ -240,7 +240,7 @@ export function StudentForm({ onClose, gyms, defaultGymId }: Props) {
         )}
       </div>
 
-      <div className="flex gap-3 px-6 py-5 border-t border-white/5 flex-shrink-0 bg-surface-1">
+      <div className="flex gap-3 px-6 py-5 border-t border-white/5 shrink-0 bg-surface-1">
         <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full text-sm font-semibold bg-surface-2 text-zinc-400 hover:text-white border border-white/5 transition-colors">
           Cancelar
         </button>

@@ -174,7 +174,7 @@ function CollectionCard({
                   <span className="text-xs text-zinc-300 flex-1 min-w-0 truncate">
                     {idx + 1}. {ce.exercise?.translated_name || ce.exercise?.title || "—"}
                   </span>
-                  <span className="text-[10px] text-zinc-600 flex-shrink-0 tabular-nums">
+                  <span className="text-[10px] text-zinc-600 shrink-0 tabular-nums">
                     {ce.default_sets}×{ce.default_reps}
                   </span>
                 </div>
@@ -272,7 +272,7 @@ function ScheduleCard({
 
   return (
     <div className="flex items-center gap-3 p-4 bg-surface-2 border border-white/5 rounded-2xl">
-      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
         <ClipboardDocumentListIcon className="w-4 h-4 text-primary" />
       </div>
       <div className="flex-1 min-w-0">
@@ -292,7 +292,7 @@ function ScheduleCard({
         onClick={handleRemove}
         disabled={pending}
         title="Remover treino"
-        className="p-2 rounded-xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-colors disabled:opacity-40 flex-shrink-0"
+        className="p-2 rounded-xl text-zinc-600 hover:bg-danger/10 hover:text-danger transition-colors disabled:opacity-40 shrink-0"
       >
         <TrashIcon className="w-4 h-4" />
       </button>
@@ -429,7 +429,7 @@ export function MemberWorkoutPanel({
                 <span className="text-xs text-zinc-300 truncate flex-1">
                   {log.exercise?.title ?? "Exercício"}
                 </span>
-                <span className="text-xs text-zinc-600 tabular-nums flex-shrink-0">
+                <span className="text-xs text-zinc-600 tabular-nums shrink-0">
                   {log.weight_kg != null && `${log.weight_kg} kg · `}
                   {log.sets_completed ?? "?"}×{log.reps_done ?? "?"}
                 </span>

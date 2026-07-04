@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   PlusIcon,
-  ArrowRightOnRectangleIcon,
   UsersIcon,
   KeyIcon,
   XMarkIcon,
@@ -20,7 +19,7 @@ function Initials({ name }: { name: string }) {
   const parts = name.trim().split(" ");
   const init = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
   return (
-    <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+    <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
       <span className="text-xs font-black text-primary">{init.toUpperCase()}</span>
     </div>
   );
@@ -66,7 +65,7 @@ function SquadCard({ squad }: { squad: SquadWithMeta }) {
             </button>
           </div>
         </div>
-        <TrophyIcon className="w-4 h-4 text-zinc-700 flex-shrink-0 mt-0.5" />
+        <TrophyIcon className="w-4 h-4 text-zinc-700 shrink-0 mt-0.5" />
       </div>
     </Link>
   );
@@ -99,7 +98,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-safe-bottom pb-6">
       <div className="w-full max-w-sm bg-surface-1 border border-white/10 rounded-3xl p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-black text-white">Criar Squad</h2>
+          <h2 className="font-black text-white">Criar Squad</h2>
           <button type="button" onClick={onClose} className="p-2 text-zinc-500 hover:text-white transition-colors">
             <XMarkIcon className="w-5 h-5" />
           </button>
@@ -135,7 +134,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={handleCreate}
           disabled={pending}
-          className="w-full min-h-[44px] bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+          className="w-full min-h-11 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {pending ? "Criando..." : "Criar Squad"}
         </button>
@@ -167,7 +166,7 @@ function JoinModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-safe-bottom pb-6">
       <div className="w-full max-w-sm bg-surface-1 border border-white/10 rounded-3xl p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-black text-white">Entrar em Squad</h2>
+          <h2 className="font-black text-white">Entrar em Squad</h2>
           <button type="button" onClick={onClose} className="p-2 text-zinc-500 hover:text-white transition-colors">
             <XMarkIcon className="w-5 h-5" />
           </button>
@@ -194,7 +193,7 @@ function JoinModal({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={handleJoin}
           disabled={pending}
-          className="w-full min-h-[44px] bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+          className="w-full min-h-11 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {pending ? "Entrando..." : "Entrar no Squad"}
         </button>
@@ -216,7 +215,7 @@ export function SquadListClient({ squads }: { squads: SquadWithMeta[] }) {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="flex items-center justify-center gap-2 min-h-[48px] bg-primary text-black font-bold rounded-2xl text-sm hover:opacity-90 active:scale-[0.98] transition-all"
+          className="flex items-center justify-center gap-2 min-h-12 bg-primary text-black font-bold rounded-2xl text-sm hover:opacity-90 active:scale-[0.98] transition-all"
         >
           <PlusIcon className="w-4 h-4" />
           Criar Squad
@@ -224,7 +223,7 @@ export function SquadListClient({ squads }: { squads: SquadWithMeta[] }) {
         <button
           type="button"
           onClick={() => setShowJoin(true)}
-          className="flex items-center justify-center gap-2 min-h-[48px] bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-white/25 transition-colors"
+          className="flex items-center justify-center gap-2 min-h-12 bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-white/25 transition-colors"
         >
           <KeyIcon className="w-4 h-4" />
           Entrar com Código

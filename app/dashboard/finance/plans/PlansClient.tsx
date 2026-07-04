@@ -151,7 +151,7 @@ function BranchPricingEditor({
                 }
                 onChange(next);
               }}
-              className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 ${checked ? "bg-primary border-primary" : "bg-surface-2 border-white/20"}`}
+              className={`w-5 h-5 rounded flex items-center justify-center border transition-all shrink-0 ${checked ? "bg-primary border-primary" : "bg-surface-2 border-white/20"}`}
             >
               {checked && <CheckCircleIcon className="w-3.5 h-3.5 text-black" />}
             </button>
@@ -580,7 +580,7 @@ function BalcaoTab({ plans, gyms, coupons }: { plans: GymPlan[]; gyms: GymBranch
                     setCopiedUrl(true);
                     setTimeout(() => setCopiedUrl(false), 2000);
                   }}
-                  className="flex-shrink-0 p-1.5 rounded-lg bg-surface-2 text-zinc-400 hover:text-white transition-colors"
+                  className="shrink-0 p-1.5 rounded-lg bg-surface-2 text-zinc-400 hover:text-white transition-colors"
                 >
                   {copiedUrl ? <CheckCircleIcon className="w-4 h-4 text-primary" /> : <ClipboardDocumentIcon className="w-4 h-4" />}
                 </button>
@@ -666,7 +666,7 @@ function BalcaoTab({ plans, gyms, coupons }: { plans: GymPlan[]; gyms: GymBranch
               <label className="text-sm text-zinc-400">Quantidade de passes:</label>
               <div className="flex items-center gap-3">
                 <button onClick={() => setPassQty(Math.max(1, passQty - 1))} className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center">−</button>
-                <span className="text-base font-bold text-white w-8 text-center tabular-nums">{passQty}</span>
+                <span className="font-bold text-white w-8 text-center tabular-nums">{passQty}</span>
                 <button onClick={() => setPassQty(Math.min(30, passQty + 1))} className="w-8 h-8 rounded-lg bg-surface-2 text-zinc-400 hover:text-white font-bold flex items-center justify-center">+</button>
               </div>
             </div>
@@ -814,7 +814,7 @@ function StudentSearch({ onSelect }: { onSelect: (s: StudentOption) => void }) {
   return (
     <div ref={containerRef} className="relative">
       <div className="flex items-center bg-surface-2 border border-white/8 rounded-xl px-3 py-2.5 gap-2">
-        <MagnifyingGlassIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+        <MagnifyingGlassIcon className="w-4 h-4 text-zinc-500 shrink-0" />
         <input
           value={query}
           onChange={(e) => handleChange(e.target.value)}

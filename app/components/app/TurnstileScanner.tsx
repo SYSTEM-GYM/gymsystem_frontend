@@ -162,7 +162,7 @@ export function TurnstileScanner() {
                 <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-3xl">
                   ✅
                 </div>
-                <p className="text-base font-black text-white text-center">{scan.message}</p>
+                <p className="font-black text-white text-center">{scan.message}</p>
                 <button
                   onClick={handleClose}
                   className="px-6 py-2.5 bg-primary text-black text-sm font-black rounded-xl"

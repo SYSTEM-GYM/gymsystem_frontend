@@ -1,28 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin as requireAdminRole } from "@/lib/auth-utils";
 import type { SettingsActionState } from "./actions";
 
 async function requireAdmin() {
-  const authClient = await createClient();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
-  if (!user) return { ok: false as const, message: "Não autorizado." };
-
-  const { data: profile } = await authClient
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || profile.role !== "admin") {
-    return { ok: false as const, message: "Permissão insuficiente." };
-  }
-
-  return { ok: true as const, userId: user.id };
+  const result = await requireAdminRole();
+  if (!result.ok) return { ok: false as const, message: result.message };
+  return { ok: true as const, userId: result.userId };
 }
 
 async function writeAudit(

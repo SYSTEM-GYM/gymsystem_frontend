@@ -15,9 +15,17 @@ type Props = {
   role: UserRole;
   gyms?: Gym[];
   currentGymId?: string | null;
+  gymName?: string;
+  logoUrl?: string | null;
 };
 
-export function MobileHeader({ role, gyms = [], currentGymId = null }: Props) {
+export function MobileHeader({
+  role,
+  gyms = [],
+  currentGymId = null,
+  gymName = "SIMP",
+  logoUrl = null,
+}: Props) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const navItems = getVisibleNavItems(role);
@@ -30,8 +38,14 @@ export function MobileHeader({ role, gyms = [], currentGymId = null }: Props) {
     <>
       {/* Sticky top bar */}
       <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-5 py-3 bg-surface-1 border-b border-white/5">
-        <span className="text-base font-black tracking-tighter text-primary">
-          SIMP
+        <span className="flex items-center gap-2 min-w-0">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt={gymName} className="h-6 w-6 rounded-lg object-cover shrink-0" />
+          ) : null}
+          <span className="font-black tracking-tighter text-primary truncate">
+            {gymName}
+          </span>
         </span>
         {role === "admin" && gyms.length > 0 && (
           <div className="flex-1 flex justify-center">
@@ -63,8 +77,14 @@ export function MobileHeader({ role, gyms = [], currentGymId = null }: Props) {
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-white/5">
-          <span className="text-lg font-black tracking-tighter text-primary">
-            SIMP
+          <span className="flex items-center gap-2 min-w-0">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt={gymName} className="h-7 w-7 rounded-lg object-cover shrink-0" />
+            ) : null}
+            <span className="text-lg font-black tracking-tighter text-primary truncate">
+              {gymName}
+            </span>
           </span>
           <button
             onClick={() => setOpen(false)}
@@ -90,7 +110,7 @@ export function MobileHeader({ role, gyms = [], currentGymId = null }: Props) {
                     : "text-zinc-400 hover:bg-surface-2 hover:text-white"
                 }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 shrink-0" />
                 {label}
               </Link>
             );

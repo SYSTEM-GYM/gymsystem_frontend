@@ -40,7 +40,7 @@ import {
   requestStreakRescue,
   voteForRescue,
 } from "@/app/app/gymconnect-actions";
-import { ActiveWorkout } from "@/app/components/app/ActiveWorkout";
+import { WorkoutPreviewModal } from "@/app/components/app/WorkoutPreviewModal";
 import type { TodayWorkoutData } from "@/lib/workout-utils";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ function Avatar({
 
   if (photo_url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={photo_url} alt={name} className={`${cls} rounded-xl object-cover flex-shrink-0`} />;
+    return <img src={photo_url} alt={name} className={`${cls} rounded-xl object-cover shrink-0`} />;
   }
 
   const init = name
@@ -105,7 +105,7 @@ function Avatar({
     .toUpperCase();
 
   return (
-    <div className={`${cls} rounded-xl bg-primary/15 flex items-center justify-center font-black text-primary flex-shrink-0`}>
+    <div className={`${cls} rounded-xl bg-primary/15 flex items-center justify-center font-black text-primary shrink-0`}>
       {init}
     </div>
   );
@@ -118,7 +118,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-safe-bottom pb-6">
       <div className="w-full max-w-sm bg-surface-1 border border-white/10 rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-black text-white">{title}</h2>
+          <h2 className="font-black text-white">{title}</h2>
           <button type="button" onClick={onClose} className="p-1.5 text-zinc-500 hover:text-white transition-colors">
             <XMarkIcon className="w-5 h-5" />
           </button>
@@ -165,14 +165,14 @@ function RankingTab({ members }: { members: SquadMember[] }) {
           return (
             <div key={member.student_id}
               className={`flex items-center gap-3 p-3 rounded-2xl border ${top3 ? `${medalBg[idx]} border-transparent` : "bg-surface-1/40 border-white/5"}`}>
-              <div className="w-7 text-center flex-shrink-0">
+              <div className="w-7 text-center shrink-0">
                 {top3 ? <TrophyIcon className={`w-5 h-5 mx-auto ${medalColors[idx]}`} /> : <span className="text-xs text-zinc-600 font-bold">{idx + 1}</span>}
               </div>
               <Avatar photo_url={member.photo_url} name={name} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white truncate">{name}</p>
               </div>
-              <div className="text-right flex-shrink-0">
+              <div className="text-right shrink-0">
                 <p className={`text-lg font-black tabular-nums ${top3 ? medalColors[idx] : "text-zinc-400"}`}>{count}</p>
                 <p className="text-[9px] text-zinc-600">treino{count !== 1 ? "s" : ""}</p>
               </div>
@@ -220,7 +220,7 @@ function FeedTab({ feed, currentUserId, squadCollectionIds }: { feed: FeedEntry[
               )}
               <p className="text-[10px] text-zinc-600 mt-0.5">{timeAgo(entry.finished_at ?? entry.created_at)}</p>
             </div>
-            <FireIcon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${isSquadWorkout ? "text-primary" : "text-orange-500/50"}`} />
+            <FireIcon className={`w-4 h-4 shrink-0 mt-0.5 ${isSquadWorkout ? "text-primary" : "text-orange-500/50"}`} />
           </div>
         );
       })}
@@ -232,7 +232,6 @@ function FeedTab({ feed, currentUserId, squadCollectionIds }: { feed: FeedEntry[
 
 function ChallengeCard({ challenge, memberCount }: { challenge: Challenge; memberCount: number }) {
   const left = daysLeft(challenge.end_date);
-  const top = challenge.progress[0];
   const typeLabel = CHALLENGE_LABELS[challenge.challenge_type];
   const unit = CHALLENGE_UNIT[challenge.challenge_type];
 
@@ -247,7 +246,7 @@ function ChallengeCard({ challenge, memberCount }: { challenge: Challenge; membe
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
             {typeIcons[challenge.challenge_type]}
           </div>
           <div className="flex-1 min-w-0">
@@ -256,7 +255,7 @@ function ChallengeCard({ challenge, memberCount }: { challenge: Challenge; membe
               {typeLabel}{challenge.target_exercise_name ? ` · ${challenge.target_exercise_name}` : ""} · Meta: {challenge.target_value} {unit}
             </p>
           </div>
-          <div className="text-right flex-shrink-0">
+          <div className="text-right shrink-0">
             <p className={`text-xs font-bold tabular-nums ${left <= 2 ? "text-danger" : "text-zinc-400"}`}>{left}d</p>
             <p className="text-[9px] text-zinc-600">restantes</p>
           </div>
@@ -273,14 +272,14 @@ function ChallengeCard({ challenge, memberCount }: { challenge: Challenge; membe
           const name = p.first_name ?? p.full_name?.split(" ")[0] ?? "Aluno";
           return (
             <div key={p.student_id} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="w-5 text-center flex-shrink-0">
+              <div className="w-5 text-center shrink-0">
                 {idx === 0 ? <TrophyIcon className="w-3.5 h-3.5 text-yellow-400 mx-auto" /> : <span className="text-[10px] text-zinc-600">{idx + 1}</span>}
               </div>
               <Avatar photo_url={p.photo_url} name={name} size="sm" />
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-zinc-300 truncate">{name}</span>
-                  <span className="text-xs font-bold text-white tabular-nums flex-shrink-0">
+                  <span className="text-xs font-bold text-white tabular-nums shrink-0">
                     {challenge.challenge_type === "volume" ? p.value.toFixed(0) : p.value}{" "}
                     <span className="text-zinc-600 font-normal text-[10px]">{unit}</span>
                   </span>
@@ -420,7 +419,7 @@ function CreateChallengeModal({ squadId, onClose }: { squadId: string; onClose: 
       {error && <p className="text-xs text-danger">{error}</p>}
 
       <button type="button" onClick={handleSubmit} disabled={pending}
-        className="w-full min-h-[44px] bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40">
+        className="w-full min-h-11 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40">
         {pending ? "Criando..." : "Criar Desafio"}
       </button>
     </Modal>
@@ -446,7 +445,7 @@ function DesafiosTab({
     <div className="space-y-4">
       {isCreator && (
         <button type="button" onClick={() => setShowCreate(true)}
-          className="w-full flex items-center justify-center gap-2 min-h-[44px] bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-primary/40 hover:text-white transition-colors">
+          className="w-full flex items-center justify-center gap-2 min-h-11 bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-primary/40 hover:text-white transition-colors">
           <PlusIcon className="w-4 h-4" />
           Criar Desafio
         </button>
@@ -512,7 +511,7 @@ function ShareWorkoutModal({ squadId, onClose }: { squadId: string; onClose: () 
       {error && <p className="text-xs text-danger">{error}</p>}
 
       <button type="button" onClick={handleShare} disabled={pending || !selectedId || loading}
-        className="w-full min-h-[44px] bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40">
+        className="w-full min-h-11 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40">
         {pending ? "Compartilhando..." : "Compartilhar"}
       </button>
     </Modal>
@@ -562,7 +561,7 @@ function SharedWorkoutCard({
     <div className="bg-surface-1 border border-white/8 rounded-2xl overflow-hidden">
       <div className="p-4 space-y-3">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <FireIcon className="w-4 h-4 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
@@ -582,7 +581,7 @@ function SharedWorkoutCard({
         {error && <p className="text-xs text-danger">{error}</p>}
 
         <button type="button" onClick={handleStart}
-          className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all">
+          className="w-full min-h-11 flex items-center justify-center gap-2 bg-primary text-black font-bold rounded-xl text-sm hover:opacity-90 active:scale-[0.98] transition-all">
           <PlayCircleIcon className="w-5 h-5" />
           Iniciar Treino
         </button>
@@ -605,13 +604,13 @@ function TreinosTab({
   squadId: string;
 }) {
   const [showShare, setShowShare] = useState(false);
-  const [activeWorkout, setActiveWorkout] = useState<TodayWorkoutData | null>(null);
+  const [previewWorkout, setPreviewWorkout] = useState<TodayWorkoutData | null>(null);
 
   return (
     <>
       <div className="space-y-4">
         <button type="button" onClick={() => setShowShare(true)}
-          className="w-full flex items-center justify-center gap-2 min-h-[44px] bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-primary/40 hover:text-white transition-colors">
+          className="w-full flex items-center justify-center gap-2 min-h-11 bg-surface-1 border border-white/10 text-zinc-300 font-semibold rounded-2xl text-sm hover:border-primary/40 hover:text-white transition-colors">
           <ShareIcon className="w-4 h-4" />
           Compartilhar Treino
         </button>
@@ -631,7 +630,7 @@ function TreinosTab({
                 currentUserId={currentUserId}
                 isCreator={isCreator}
                 squadId={squadId}
-                onStart={setActiveWorkout}
+                onStart={setPreviewWorkout}
               />
             ))}
           </div>
@@ -640,11 +639,11 @@ function TreinosTab({
 
       {showShare && <ShareWorkoutModal squadId={squadId} onClose={() => setShowShare(false)} />}
 
-      {activeWorkout && (
-        <ActiveWorkout
-          workout={activeWorkout}
+      {previewWorkout && (
+        <WorkoutPreviewModal
+          workout={previewWorkout}
           lastLogs={{}}
-          onClose={() => setActiveWorkout(null)}
+          onClose={() => setPreviewWorkout(null)}
         />
       )}
     </>
@@ -710,7 +709,7 @@ function ResgatesTab({
       {meAtRisk && (
         <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl space-y-3">
           <div className="flex items-start gap-3">
-            <FireIcon className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <FireIcon className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white">Sua ofensiva está em risco!</p>
               <p className="text-xs text-zinc-400 mt-0.5">
@@ -814,7 +813,7 @@ function ResgatesTab({
                     type="button"
                     onClick={() => handleVote(rescue.id)}
                     disabled={pending}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-50 transition-opacity min-h-[36px]"
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-primary text-black hover:opacity-90 disabled:opacity-50 transition-opacity min-h-9"
                   >
                     👍 Votar
                   </button>
@@ -894,7 +893,7 @@ export function SquadDashboard({
     <div className="space-y-5">
       {/* Header card */}
       <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-primary via-primary/50 to-transparent" />
+        <div className="h-1 bg-linear-to-r from-primary via-primary/50 to-transparent" />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -903,7 +902,7 @@ export function SquadDashboard({
             </div>
             {!isCreator && (
               <button type="button" onClick={handleLeave} disabled={pending} title="Sair do squad"
-                className="p-2 text-zinc-600 hover:text-danger transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+                className="p-2 text-zinc-600 hover:text-danger transition-colors min-h-11 min-w-11 flex items-center justify-center">
                 <ArrowRightStartOnRectangleIcon className="w-5 h-5" />
               </button>
             )}
@@ -944,7 +943,7 @@ export function SquadDashboard({
       <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4">
         {TABS.map(({ id, label }) => (
           <button key={id} type="button" onClick={() => setTab(id)}
-            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors ${tab === id ? "bg-primary text-black" : "bg-surface-1 border border-white/8 text-zinc-500 hover:text-zinc-300"}`}>
+            className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors ${tab === id ? "bg-primary text-black" : "bg-surface-1 border border-white/8 text-zinc-500 hover:text-zinc-300"}`}>
             {label}
             {id === "desafios" && squad.challenges.length > 0 && (
               <span className="ml-1.5 bg-primary/20 text-primary text-[9px] px-1.5 py-0.5 rounded-full">

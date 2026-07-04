@@ -147,7 +147,7 @@ export function TransactionForm({ members, onSuccess }: Props) {
                   >
                     <span>{m.full_name}</span>
                     {selectedMember?.id === m.id && (
-                      <CheckIcon className="w-4 h-4 text-primary flex-shrink-0" />
+                      <CheckIcon className="w-4 h-4 text-primary shrink-0" />
                     )}
                   </button>
                 </li>

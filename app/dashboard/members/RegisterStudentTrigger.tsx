@@ -16,7 +16,7 @@ export function RegisterStudentTrigger({ gyms, defaultGymId }: Props) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform flex-shrink-0"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-primary text-black hover:scale-105 active:scale-95 transition-transform shrink-0"
       >
         <UserPlusIcon className="w-4 h-4" />
         Matricular Aluno
@@ -31,9 +31,9 @@ export function RegisterStudentTrigger({ gyms, defaultGymId }: Props) {
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 shrink-0">
           <div>
-            <h2 className="text-base font-bold text-white">Matricular Aluno</h2>
+            <h2 className="font-bold text-white">Matricular Aluno</h2>
             <p className="text-xs text-zinc-500 mt-0.5">Preencha os dados e capture a foto do aluno.</p>
           </div>
           <button onClick={() => setOpen(false)} className="p-2 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors" aria-label="Fechar">

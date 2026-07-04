@@ -1,13 +1,49 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { PlayCircleIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { FilmIcon, PlayCircleIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { ExerciseVideoModal, type Exercise } from "./ExerciseVideoModal";
 import { ExerciseRowSkeleton } from "@/components/ui/Skeleton";
+import { muscleGroupLabel, resolveExerciseMedia } from "@/lib/exercise-utils";
 
 export type { Exercise };
 
 const PAGE_SIZE = 20;
+
+function ExerciseThumb({ exercise, alt }: { exercise: Exercise; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  const media = resolveExerciseMedia(exercise);
+
+  if (!failed && media.kind === "video") {
+    return (
+      <video
+        src={media.url}
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  if (!failed && media.kind === "youtube") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={media.thumbUrl}
+        alt={alt}
+        className="absolute inset-0 w-full h-full object-cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-linear-to-br from-zinc-800 to-zinc-900">
+      <FilmIcon className="w-8 h-8 text-zinc-600" />
+    </div>
+  );
+}
 
 type Props = { exercises: Exercise[] };
 
@@ -18,6 +54,14 @@ export function ExerciseList({ exercises }: Props) {
   const sentinelRef = useRef<HTMLLIElement>(null);
 
   const query = search.trim().toLowerCase();
+
+  // Render-phase pagination reset when the search changes (avoids an
+  // effect-based setState cascade)
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (prevQuery !== query) {
+    setPrevQuery(query);
+    setVisibleCount(PAGE_SIZE);
+  }
   const filtered = useMemo(
     () =>
       query
@@ -32,10 +76,6 @@ export function ExerciseList({ exercises }: Props) {
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
-
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [query]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -54,13 +94,7 @@ export function ExerciseList({ exercises }: Props) {
     return () => observer.disconnect();
   }, [hasMore, filtered.length]);
 
-  const hasVideo = (e: Exercise) => !!(e.youtube_url || e.webm_path || e.video_url);
-
-  function extractYtId(url: string | null | undefined): string | null {
-    if (!url) return null;
-    const m = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    return m?.[1] ?? null;
-  }
+  const hasVideo = (e: Exercise) => resolveExerciseMedia(e).kind !== "none";
 
   return (
     <>
@@ -84,9 +118,9 @@ export function ExerciseList({ exercises }: Props) {
       ) : (
         <ul className="space-y-3">
           {visible.map((exercise) => {
-            const ytId = extractYtId(exercise.youtube_url);
             const clickable = hasVideo(exercise);
             const displayName = exercise.translated_name || exercise.title;
+            const muscleLabel = muscleGroupLabel(exercise.muscle_group);
             return (
               <li
                 key={exercise.id}
@@ -96,21 +130,10 @@ export function ExerciseList({ exercises }: Props) {
                 }`}
               >
                 {/* Thumbnail — strictly left, fixed size */}
-                <div className="w-24 h-24 flex-shrink-0 relative bg-zinc-800">
-                  {ytId ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
-                      alt={displayName}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-                      <PlayCircleIcon className="w-9 h-9 text-zinc-600" />
-                    </div>
-                  )}
+                <div className="w-24 h-24 shrink-0 relative bg-zinc-800">
+                  <ExerciseThumb exercise={exercise} alt={displayName} />
                   {/* Play overlay for video items */}
-                  {clickable && ytId && (
+                  {clickable && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity">
                       <PlayCircleIcon className="w-8 h-8 text-white drop-shadow-lg" />
                     </div>
@@ -127,11 +150,18 @@ export function ExerciseList({ exercises }: Props) {
                       {exercise.description}
                     </p>
                   )}
-                  {clickable && (
-                    <span className="inline-block self-start mt-2 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
-                      Ver Vídeo
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    {muscleLabel && (
+                      <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold bg-surface-2 text-zinc-400 border border-white/5">
+                        {muscleLabel}
+                      </span>
+                    )}
+                    {clickable && (
+                      <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
+                        Ver Vídeo
+                      </span>
+                    )}
+                  </div>
                 </div>
               </li>
             );

@@ -321,7 +321,7 @@ export function CreatePlanButton({ plans }: { plans: GymPlan[] }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-1 border border-white/8 rounded-2xl w-full max-w-sm p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white">Criar Plano</h2>
+              <h2 className="font-bold text-white">Criar Plano</h2>
               <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
             </div>
 

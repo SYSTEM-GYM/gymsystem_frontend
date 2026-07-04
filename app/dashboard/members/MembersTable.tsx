@@ -105,7 +105,7 @@ function ActionDropdown({
             onMouseDown={() => { setOpen(false); router.push(`/dashboard/members/${member.id}`); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
           >
-            <UserCircleIcon className="w-4 h-4 flex-shrink-0" />
+            <UserCircleIcon className="w-4 h-4 shrink-0" />
             Ver Ficha
           </button>
 
@@ -115,7 +115,7 @@ function ActionDropdown({
             onMouseDown={handleBanToggle}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-danger hover:bg-danger/10 transition-colors text-left"
           >
-            <NoSymbolIcon className="w-4 h-4 flex-shrink-0" />
+            <NoSymbolIcon className="w-4 h-4 shrink-0" />
             {isBanned ? "Desbanir" : "Banir Aluno"}
           </button>
         </div>
@@ -146,10 +146,10 @@ function MemberTableRow({ member }: { member: MemberRow }) {
             <img
               src={member.photo_url}
               alt={member.full_name}
-              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              className="w-8 h-8 rounded-full object-cover shrink-0"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0 text-xs font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center shrink-0 text-xs font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
               {(member.full_name ?? "?").charAt(0).toUpperCase()}
             </div>
           )}

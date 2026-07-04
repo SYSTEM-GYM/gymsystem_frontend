@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin as requireAdminRole } from "@/lib/auth-utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,17 +46,9 @@ export type ManualSaleResult =
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
 async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: false; message: string }> {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return { ok: false, message: "Não autorizado." };
-
-  const { data: profile } = await authClient
-    .from("users").select("role").eq("id", user.id).single();
-
-  if (!profile || profile.role !== "admin") {
-    return { ok: false, message: "Permissão insuficiente." };
-  }
-  return { ok: true, userId: user.id };
+  const result = await requireAdminRole();
+  if (!result.ok) return { ok: false, message: result.message };
+  return { ok: true, userId: result.userId };
 }
 
 // ── Stripe helper ─────────────────────────────────────────────────────────────

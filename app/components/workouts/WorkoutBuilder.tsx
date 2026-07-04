@@ -70,12 +70,12 @@ function ExerciseThumbnail({ exercise }: { exercise: ExerciseOption }) {
       <img
         src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
         alt={exercise.title}
-        className="w-12 h-12 object-cover rounded-xl flex-shrink-0 bg-zinc-900"
+        className="w-12 h-12 object-cover rounded-xl shrink-0 bg-zinc-900"
       />
     );
   }
   return (
-    <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center flex-shrink-0">
+    <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center shrink-0">
       <FilmIcon className="w-5 h-5 text-zinc-600" />
     </div>
   );
@@ -164,7 +164,7 @@ function ExerciseCombobox({
                     <p className="text-xs text-zinc-500 capitalize">{ex.primary_muscle}</p>
                   )}
                 </div>
-                <PlusIcon className="w-4 h-4 text-primary flex-shrink-0 ml-auto" />
+                <PlusIcon className="w-4 h-4 text-primary shrink-0 ml-auto" />
               </button>
             </li>
           ))}
@@ -225,7 +225,7 @@ function BuilderItemRow({
       </div>
 
       {/* Index */}
-      <span className="w-5 text-xs text-zinc-600 tabular-nums text-center flex-shrink-0 pt-2.5">
+      <span className="w-5 text-xs text-zinc-600 tabular-nums text-center shrink-0 pt-2.5">
         {index + 1}
       </span>
 
@@ -321,7 +321,7 @@ function BuilderItemRow({
       <button
         type="button"
         onClick={onRemove}
-        className="p-2 text-zinc-600 hover:text-danger transition-colors flex-shrink-0 pt-2"
+        className="p-2 text-zinc-600 hover:text-danger transition-colors shrink-0 pt-2"
         aria-label="Remover exercício"
       >
         <TrashIcon className="w-4 h-4" />
@@ -525,13 +525,13 @@ export function WorkoutBuilder({ exercises, gyms }: Props) {
       {/* Feedback */}
       {result && !result.ok && (
         <div className="flex items-center gap-3 px-4 py-3 bg-danger/10 border border-danger/20 rounded-2xl">
-          <ExclamationTriangleIcon className="w-5 h-5 text-danger flex-shrink-0" />
+          <ExclamationTriangleIcon className="w-5 h-5 text-danger shrink-0" />
           <p className="text-sm text-danger">{result.message}</p>
         </div>
       )}
       {result?.ok && (
         <div className="flex items-center gap-3 px-4 py-3 bg-primary/10 border border-primary/20 rounded-2xl">
-          <CheckCircleIcon className="w-5 h-5 text-primary flex-shrink-0" />
+          <CheckCircleIcon className="w-5 h-5 text-primary shrink-0" />
           <p className="text-sm text-primary font-semibold">Treino salvo com sucesso!</p>
         </div>
       )}

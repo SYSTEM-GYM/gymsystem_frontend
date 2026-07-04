@@ -7,8 +7,40 @@ const ADMIN_ONLY_ROUTES = ["/dashboard/members", "/dashboard/finance", "/dashboa
 // Routes that require any authenticated user
 const APP_ROUTES = ["/app"];
 
+// White-label subdomains that don't map to a tenant (e.g. app.oursystem.com, www.oursystem.com)
+const RESERVED_SUBDOMAINS = new Set(["www", "app"]);
+
+/**
+ * Resolves a tenant slug from the request host, e.g. "academia.localhost:3000"
+ * or "academia.oursystem.com" -> "academia". Returns null for bare domains
+ * (localhost, oursystem.com) and reserved subdomains.
+ */
+function resolveTenantSlug(host: string): string | null {
+  const hostname = host.split(":")[0];
+  const parts = hostname.split(".");
+  const hasSubdomain = parts.length > 2 || (parts.length === 2 && parts[1] === "localhost");
+  if (!hasSubdomain) return null;
+
+  const candidate = parts[0];
+  return RESERVED_SUBDOMAINS.has(candidate) ? null : candidate;
+}
+
+function buildRequestHeaders(request: NextRequest, tenantSlug: string | null): Headers {
+  const headers = new Headers(request.headers);
+  if (tenantSlug) {
+    headers.set("x-tenant-slug", tenantSlug);
+  } else {
+    headers.delete("x-tenant-slug");
+  }
+  return headers;
+}
+
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const tenantSlug = resolveTenantSlug(request.headers.get("host") ?? "");
+
+  let supabaseResponse = NextResponse.next({
+    request: { headers: buildRequestHeaders(request, tenantSlug) },
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +54,9 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = NextResponse.next({
+            request: { headers: buildRequestHeaders(request, tenantSlug) },
+          });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );

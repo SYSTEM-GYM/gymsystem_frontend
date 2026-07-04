@@ -147,7 +147,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
             <div>
-              <h3 className="text-base font-bold text-white">Nova Despesa Fixa</h3>
+              <h3 className="font-bold text-white">Nova Despesa Fixa</h3>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Modelo gerado automaticamente todo mês.
               </p>
@@ -262,7 +262,7 @@ export function RecurringExpensesManager({ initialExpenses }: Props) {
       {/* Section header */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
         <div>
-          <h2 className="text-base font-bold text-white">Despesas Fixas Recorrentes</h2>
+          <h2 className="font-bold text-white">Despesas Fixas Recorrentes</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
             Lançamentos gerados automaticamente todo mês pelo sistema.
           </p>

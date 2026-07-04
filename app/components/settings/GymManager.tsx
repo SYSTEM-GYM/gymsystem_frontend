@@ -46,7 +46,7 @@ function CreateGymModal({ onClose }: { onClose: () => void }) {
         <div className="w-full max-w-md bg-surface-1 border border-white/10 rounded-3xl shadow-2xl">
           <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
             <div>
-              <h3 className="text-base font-bold text-white">Nova Filial</h3>
+              <h3 className="font-bold text-white">Nova Filial</h3>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Adicione uma nova unidade da sua academia.
               </p>
@@ -126,7 +126,7 @@ export function GymManager({ initialGyms, gymHours }: Props) {
     <div className="bg-surface-1 border border-white/5 rounded-3xl overflow-hidden">
       <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
         <div>
-          <h2 className="text-base font-bold text-white">Filiais</h2>
+          <h2 className="font-bold text-white">Filiais</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
             Gerencie as unidades da sua rede.
           </p>
@@ -170,7 +170,7 @@ export function GymManager({ initialGyms, gymHours }: Props) {
                   <tr className="hover:bg-surface-2/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                           <BuildingOffice2Icon className="w-4 h-4 text-primary" />
                         </div>
                         <span className="font-medium text-white">{gym.name}</span>

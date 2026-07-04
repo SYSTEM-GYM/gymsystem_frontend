@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin as requireAdminRole } from "@/lib/auth-utils";
 import {
   isValidCPF,
   parseAnamnesisData,
@@ -12,28 +12,17 @@ import {
 } from "@/lib/member-utils";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
+// Thin adapter over the shared requireRole()/requireAdmin() util — kept so
+// every call site below (`await requireAdmin()`) and its `{ ok, ..., error }`
+// shape stay unchanged.
 
 async function requireAdmin(): Promise<
   | { ok: true; userId: string; gymId: string | null }
   | { ok: false; error: string }
 > {
-  const authClient = await createClient();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
-  if (!user) return { ok: false, error: "Não autorizado." };
-
-  const { data: profile } = await authClient
-    .from("users")
-    .select("role, home_gym_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || profile.role !== "admin") {
-    return { ok: false, error: "Permissão insuficiente." };
-  }
-
-  return { ok: true, userId: user.id, gymId: profile.home_gym_id ?? null };
+  const result = await requireAdminRole();
+  if (!result.ok) return { ok: false, error: result.message };
+  return { ok: true, userId: result.userId, gymId: result.gymId };
 }
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -371,7 +360,10 @@ export type ExerciseSearchResult = {
   muscle_group: string | null;
 };
 
-export async function searchExercises(query: string): Promise<
+export async function searchExercises(
+  query: string,
+  muscleGroup?: string | null,
+): Promise<
   | { ok: true; exercises: ExerciseSearchResult[] }
   | { ok: false; error: string }
 > {
@@ -379,14 +371,22 @@ export async function searchExercises(query: string): Promise<
   if (!auth.ok) return { ok: false, error: auth.error };
 
   const q = query.trim();
-  if (q.length < 2) return { ok: true, exercises: [] };
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let request = admin
     .from("exercises")
     .select("id, title, translated_name, youtube_url, muscle_group")
-    .or(`title.ilike.%${q}%,translated_name.ilike.%${q}%`)
-    .limit(15);
+    .order("translated_name", { ascending: true, nullsFirst: false })
+    .limit(60);
+
+  if (q.length >= 2) {
+    request = request.or(`title.ilike.%${q}%,translated_name.ilike.%${q}%`);
+  }
+  if (muscleGroup) {
+    request = request.eq("muscle_group", muscleGroup);
+  }
+
+  const { data, error } = await request;
 
   if (error) {
     console.error("searchExercises error:", error);
