@@ -6,7 +6,11 @@ import { MuscleRadarChart } from "@/app/components/app/MuscleRadarChart";
 import { fetchStudentWorkouts } from "@/lib/workout-utils";
 import { getMuscleHeatmapData } from "@/app/app/workout-actions";
 import Link from "next/link";
-import { BookOpenIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import {
+  BookOpenIcon,
+  BuildingStorefrontIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 
 export const revalidate = 60;
 
@@ -168,6 +172,23 @@ export default async function StudentHomePage() {
 
       {/* Muscle Radar Chart */}
       <MuscleRadarChart volume={muscleVolume} />
+
+      {/* Store shortcut */}
+      <Link
+        href="/app/store"
+        className="flex items-center gap-3 p-4 bg-surface-1 border border-white/5 rounded-2xl hover:border-primary/20 transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <BuildingStorefrontIcon className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">Loja da Academia</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Suplementos, roupas e acessórios com retirada na recepção
+          </p>
+        </div>
+        <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
+      </Link>
 
       {/* Library shortcut */}
       <Link

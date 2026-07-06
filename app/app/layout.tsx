@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StudentBottomNav } from "@/app/components/app/StudentBottomNav";
+import { StoreCartProvider } from "@/lib/store-cart";
 
 export default async function StudentAppLayout({
   children,
@@ -26,17 +27,19 @@ export default async function StudentAppLayout({
   }
 
   return (
-    // Full-height viewport; content scrolls above the fixed bottom nav
-    <div className="min-h-screen bg-base flex flex-col">
-      {/* Scrollable content area — pb-20 leaves room for the 80px bottom nav */}
-      <main className="flex-1 overflow-y-auto pb-20">
-        <div className="max-w-lg mx-auto w-full px-4 pt-6">
-          {children}
-        </div>
-      </main>
+    <StoreCartProvider>
+      {/* Full-height viewport; content scrolls above the fixed bottom nav */}
+      <div className="min-h-screen bg-base flex flex-col">
+        {/* Scrollable content area — pb-20 leaves room for the 80px bottom nav */}
+        <main className="flex-1 overflow-y-auto pb-20">
+          <div className="max-w-lg mx-auto w-full px-4 pt-6">
+            {children}
+          </div>
+        </main>
 
-      {/* Fixed bottom navigation — mobile-first */}
-      <StudentBottomNav />
-    </div>
+        {/* Fixed bottom navigation — mobile-first */}
+        <StudentBottomNav />
+      </div>
+    </StoreCartProvider>
   );
 }
