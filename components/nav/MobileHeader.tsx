@@ -23,7 +23,7 @@ export function MobileHeader({
   role,
   gyms = [],
   currentGymId = null,
-  gymName = "SIMP",
+  gymName = "CM Gym Connect",
   logoUrl = null,
 }: Props) {
   const [open, setOpen] = useState(false);

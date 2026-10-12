@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/auth/actions";
 import {
   ArrowLeftStartOnRectangleIcon,
+  ChatBubbleLeftRightIcon,
   ChevronRightIcon,
   ShoppingBagIcon,
   UserCircleIcon,
@@ -108,6 +109,21 @@ export default async function StudentProfilePage() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-white">Meus Pedidos</p>
           <p className="text-xs text-zinc-500 mt-0.5">Histórico de compras na loja</p>
+        </div>
+        <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
+      </Link>
+
+      {/* Ouvidoria */}
+      <Link
+        href="/app/feedback"
+        className="flex items-center gap-3 p-4 bg-surface-1 border border-white/5 rounded-2xl hover:border-primary/20 transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <ChatBubbleLeftRightIcon className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">Ouvidoria</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Envie feedback anônimo à administração</p>
         </div>
         <ChevronRightIcon className="w-4 h-4 text-zinc-600 group-hover:text-primary transition-colors shrink-0" />
       </Link>

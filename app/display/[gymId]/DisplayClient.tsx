@@ -39,11 +39,15 @@ export function DisplayClient({ gymId }: { gymId: string }) {
     }
   }, [gymId]);
 
-  // Fetch immediately, then refresh every 28s
+  // Fetch on the next tick, then refresh every 28s (async fetch keeps the
+  // setState calls out of the effect body itself)
   useEffect(() => {
-    fetchToken();
-    const interval = setInterval(fetchToken, 28_000);
-    return () => clearInterval(interval);
+    const initial = setTimeout(() => void fetchToken(), 0);
+    const interval = setInterval(() => void fetchToken(), 28_000);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
   }, [fetchToken]);
 
   // Countdown display
@@ -85,7 +89,7 @@ export function DisplayClient({ gymId }: { gymId: string }) {
         </p>
         <h1 className="text-3xl font-black text-white">{state.gymName}</h1>
         <p className="text-sm text-zinc-400">
-          Abra o app SIMP e escaneie este código para entrar
+          Abra o app CM Gym Connect e escaneie este código para entrar
         </p>
       </div>
 

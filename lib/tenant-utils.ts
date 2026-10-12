@@ -65,7 +65,7 @@ const CSS_VAR_MAP: { key: keyof TenantBrandingColors; cssVar: string }[] = [
 /**
  * Builds a `:root { --color-x: ... }` override block for the given branding
  * colors. Returns null when there's nothing to override (missing/empty
- * colors), so the default SIMP theme in globals.css applies untouched.
+ * colors), so the default CM Gym Connect theme in globals.css applies untouched.
  */
 export function buildThemeOverrideCss(colors: TenantBrandingColors): string | null {
   const declarations = CSS_VAR_MAP.filter(({ key }) => colors[key]).map(

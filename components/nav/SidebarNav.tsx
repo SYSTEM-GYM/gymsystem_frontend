@@ -19,7 +19,7 @@ type Props = {
   logoUrl?: string | null;
 };
 
-export function SidebarNav({ role, expanded = false, onToggle, gymName = "SIMP", logoUrl = null }: Props) {
+export function SidebarNav({ role, expanded = false, onToggle, gymName = "CM Gym Connect", logoUrl = null }: Props) {
   const pathname = usePathname();
   const navItems = getVisibleNavItems(role);
   const initial = gymName.charAt(0).toUpperCase();

@@ -1,6 +1,6 @@
 {
-  "name": "SIMP - Sistema Inteligente de Musculação e Performance",
-  "short_name": "SIMP",
+  "name": "CM Gym Connect - Gestão Inteligente de Academias",
+  "short_name": "CM Gym",
   "description": "Plataforma gamificada para gestão de academias",
   "start_url": "/",
   "display": "standalone",

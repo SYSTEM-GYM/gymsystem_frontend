@@ -6,7 +6,7 @@ import { MobileHeader } from "@/components/nav/MobileHeader";
 import { GymSelector } from "@/app/components/layout/GymSelector";
 import { getTenantBranding } from "@/lib/tenant-utils";
 
-export type UserRole = "admin" | "trainer" | "customer";
+export type UserRole = "admin" | "trainer" | "receptionist" | "customer";
 
 export default async function DashboardLayout({
   children,
@@ -40,11 +40,11 @@ export default async function DashboardLayout({
   }
 
   // White-label branding — resolved from the subdomain slug the middleware
-  // injects. No slug (Master platform) falls back to the default "SIMP" name/logo.
+  // injects. No slug (Master platform) falls back to the default "CM Gym Connect" name/logo.
   const headersList = await headers();
   const tenantSlug = headersList.get("x-tenant-slug");
   const branding = tenantSlug ? await getTenantBranding(tenantSlug) : null;
-  const gymName = branding?.name ?? "SIMP";
+  const gymName = branding?.name ?? "CM Gym Connect";
   const logoUrl = branding?.logoUrl ?? null;
 
   const header = (

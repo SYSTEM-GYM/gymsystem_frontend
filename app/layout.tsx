@@ -13,13 +13,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SIMP - Academia",
+  title: "CM Gym Connect - Academia",
   description: "Plataforma gamificada para gestão de academias",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "SIMP",
+    title: "CM Gym Connect",
   },
   formatDetection: { telephone: false },
 };
@@ -31,7 +31,7 @@ export default async function RootLayout({
 }>) {
   // White-label theming: resolved from the subdomain slug the middleware
   // injects as x-tenant-slug. No slug (Master platform, bare domain) or no
-  // matching gym/colors falls back to the default SIMP theme untouched.
+  // matching gym/colors falls back to the default CM Gym Connect theme untouched.
   const headersList = await headers();
   const tenantSlug = headersList.get("x-tenant-slug");
   const branding = tenantSlug ? await getTenantBranding(tenantSlug) : null;

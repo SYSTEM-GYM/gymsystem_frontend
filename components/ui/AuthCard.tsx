@@ -4,8 +4,8 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <span className="text-4xl font-black tracking-tighter text-primary">
-            SIMP
+          <span className="text-3xl font-black tracking-tighter text-primary">
+            CM Gym Connect
           </span>
           <p className="mt-1 text-xs text-zinc-600 uppercase tracking-widest">
             Academia

@@ -191,27 +191,28 @@ function ProductModal({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="w-full max-w-2xl bg-surface-1 border border-white/10 rounded-3xl shadow-2xl my-4">
-          <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
-            <div>
-              <h3 className="font-bold text-white">
+      {/* Bottom sheet on small screens, centered dialog from sm: up */}
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="w-full sm:max-w-2xl max-h-[94vh] sm:max-h-[90vh] bg-surface-1 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 sm:py-5 border-b border-white/5 shrink-0">
+            <div className="min-w-0">
+              <h3 className="font-bold text-white truncate">
                 {savedId ? "Editar Produto" : "Novo Produto"}
               </h3>
-              <p className="text-xs text-zinc-500 mt-0.5">
+              <p className="text-xs text-zinc-500 mt-0.5 truncate">
                 {savedId ? "Ajuste dados, fotos e variações." : "Salve o produto para liberar as variações."}
               </p>
             </div>
-            <button onClick={onClose} className="p-2 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors">
+            <button onClick={onClose} className="p-2 rounded-xl text-zinc-500 hover:bg-surface-2 hover:text-white transition-colors shrink-0 min-h-11 min-w-11 flex items-center justify-center">
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="px-6 py-6 space-y-5">
+          <div className="px-4 sm:px-6 py-5 sm:py-6 space-y-5 overflow-y-auto overscroll-contain flex-1 min-w-0">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className={labelCls}>Título *</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Camiseta Dry-Fit SIMP" className={inputCls} maxLength={140} />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Camiseta Dry-Fit CM" className={inputCls} maxLength={140} />
               </div>
               <div>
                 <label className={labelCls}>Marca</label>
@@ -244,22 +245,23 @@ function ProductModal({
               </div>
             </div>
 
-            {/* Photos */}
+            {/* Photos — uniform responsive grid, no misaligned wrap on phones */}
             <div>
               <label className={labelCls}>Fotos do produto</label>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {mediaUrls.map((url, idx) => (
-                  <div key={url} className="relative w-20 h-20 rounded-xl overflow-hidden border border-white/10 group">
+                  <div key={url} className="relative aspect-square rounded-xl overflow-hidden border border-white/10 group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={url} alt={`Foto ${idx + 1}`} className="absolute inset-0 w-full h-full object-cover" />
                     <button type="button" onClick={() => setMediaUrls((prev) => prev.filter((u) => u !== url))}
-                      className="absolute top-1 right-1 p-1 rounded-lg bg-black/70 text-zinc-300 hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity">
+                      aria-label="Remover foto"
+                      className="absolute top-1 right-1 p-1 rounded-lg bg-black/70 text-zinc-300 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <TrashIcon className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
                 <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-                  className="w-20 h-20 rounded-xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 text-zinc-600 hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-40">
+                  className="aspect-square rounded-xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 text-zinc-600 hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-40">
                   <PhotoIcon className="w-5 h-5" />
                   <span className="text-[9px] font-semibold">{uploading ? "Enviando..." : "Adicionar"}</span>
                 </button>
@@ -267,18 +269,25 @@ function ProductModal({
               </div>
             </div>
 
-            {/* Variants */}
+            {/* Variants — horizontal scroll keeps the grid intact on phones */}
             {savedId ? (
               <div className="space-y-2">
                 <label className={labelCls}>Variações & Estoque</label>
-                <div className="grid grid-cols-[1fr_1fr_1fr_1fr_80px_64px_auto] gap-1.5 text-[9px] text-zinc-600 uppercase tracking-wide px-0.5">
-                  <span>Tamanho</span><span>Cor</span><span>Modelo</span><span>SKU</span>
-                  <span className="text-right">Preço dif.</span><span className="text-right">Estoque</span><span />
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 pb-1">
+                  <div className="min-w-140 space-y-2">
+                    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_80px_64px_auto] gap-1.5 text-[9px] text-zinc-600 uppercase tracking-wide px-0.5">
+                      <span>Tamanho</span><span>Cor</span><span>Modelo</span><span>SKU</span>
+                      <span className="text-right">Preço dif.</span><span className="text-right">Estoque</span><span />
+                    </div>
+                    {(product?.product_variants ?? []).map((v) => (
+                      <VariantRow key={v.id} variant={v} productId={savedId} onChanged={() => router.refresh()} />
+                    ))}
+                    <VariantRow variant={null} productId={savedId} onChanged={() => router.refresh()} />
+                  </div>
                 </div>
-                {(product?.product_variants ?? []).map((v) => (
-                  <VariantRow key={v.id} variant={v} productId={savedId} onChanged={() => router.refresh()} />
-                ))}
-                <VariantRow variant={null} productId={savedId} onChanged={() => router.refresh()} />
+                <p className="text-[10px] text-zinc-600 sm:hidden">
+                  Arraste para o lado para ver todos os campos.
+                </p>
               </div>
             ) : (
               <p className="text-xs text-zinc-600 bg-surface-2/50 border border-white/5 rounded-xl px-4 py-3">
@@ -314,7 +323,13 @@ function CouponModal({ coupon, onClose }: { coupon: StoreCoupon | null; onClose:
   const [value, setValue] = useState(coupon?.discount_value?.toString() ?? "");
   const [minOrder, setMinOrder] = useState(coupon?.min_order_amount?.toString() ?? "0");
   const [maxUses, setMaxUses] = useState(coupon?.max_uses?.toString() ?? "");
-  const [expiresAt, setExpiresAt] = useState(coupon?.expires_at?.slice(0, 10) ?? "");
+  // datetime-local wants "YYYY-MM-DDTHH:mm" in the browser's local timezone
+  const [expiresAt, setExpiresAt] = useState(() => {
+    if (!coupon?.expires_at) return "";
+    const d = new Date(coupon.expires_at);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [active, setActive] = useState(coupon?.active ?? true);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -329,7 +344,8 @@ function CouponModal({ coupon, onClose }: { coupon: StoreCoupon | null; onClose:
         discountValue: parseFloat(value) || 0,
         minOrderAmount: parseFloat(minOrder) || 0,
         maxUses: maxUses ? parseInt(maxUses, 10) : null,
-        expiresAt: expiresAt ? `${expiresAt}T23:59:59Z` : null,
+        // datetime-local is timezone-naive → toISOString converts local → UTC
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
         active,
       });
       if (res.ok) { router.refresh(); onClose(); }
@@ -375,8 +391,11 @@ function CouponModal({ coupon, onClose }: { coupon: StoreCoupon | null; onClose:
               <input value={maxUses} onChange={(e) => setMaxUses(e.target.value)} type="number" min="1" placeholder="Ilimitado" className={inputCls} />
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>Validade</label>
-              <input value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} type="date" className={inputCls} />
+              <label className={labelCls}>Validade (data e hora exatas)</label>
+              <input value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} type="datetime-local" className={inputCls} />
+              <p className="text-[10px] text-zinc-600 mt-1">
+                Perfeito para cupons relâmpago — o desconto expira no minuto marcado.
+              </p>
             </div>
             <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
@@ -564,7 +583,10 @@ export function StoreClient({ initialData }: { initialData: StoreDashboardData }
                     <p className="text-[10px] text-zinc-600 mt-1">
                       {c.used_count}{c.max_uses ? `/${c.max_uses}` : ""} usos
                       {c.min_order_amount > 0 && ` · mín. ${fmt(c.min_order_amount)}`}
-                      {c.expires_at && ` · até ${new Date(c.expires_at).toLocaleDateString("pt-BR")}`}
+                      {c.expires_at &&
+                        ` · até ${new Date(c.expires_at).toLocaleString("pt-BR", {
+                          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                        })}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
