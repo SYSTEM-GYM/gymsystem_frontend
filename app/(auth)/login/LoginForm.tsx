@@ -14,7 +14,7 @@ import { signIn, type AuthActionState } from "@/app/auth/actions";
 
 const initialState: AuthActionState = {};
 
-export function LoginForm() {
+export function LoginForm({ notice }: { notice?: string }) {
   const [state, formAction, isPending] = useActionState(signIn, initialState);
 
   return (
@@ -56,6 +56,7 @@ export function LoginForm() {
           </div>
         </div>
 
+        {notice && !state.error && <AuthNotice>{notice}</AuthNotice>}
         {state.error && <AuthNotice tone="error">{state.error}</AuthNotice>}
 
         <AuthSubmitButton pending={isPending}>

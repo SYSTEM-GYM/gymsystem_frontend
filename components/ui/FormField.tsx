@@ -7,6 +7,7 @@ interface FormFieldProps {
   required?: boolean;
   autoComplete?: string;
   minLength?: number;
+  defaultValue?: string;
   /** "glass" is the translucent style used on the photo-backed auth screens. */
   variant?: "default" | "glass";
 }
@@ -33,6 +34,7 @@ export function FormField({
   required,
   autoComplete,
   minLength,
+  defaultValue,
   variant = "default",
 }: FormFieldProps) {
   const styles = STYLES[variant];
@@ -50,6 +52,7 @@ export function FormField({
         required={required}
         autoComplete={autoComplete}
         minLength={minLength}
+        defaultValue={defaultValue}
         className={styles.input}
       />
     </div>

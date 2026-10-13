@@ -74,8 +74,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // /register and /forgot-password are UI-only for now (no Supabase calls) —
-  // students are still registered by admins via registerStudent.
+  // /register signs up through the NestJS backend (POST /api/auth/register);
+  // /forgot-password is still UI-only.
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname.startsWith(r));
 
   if (!user && !isAuthRoute) {

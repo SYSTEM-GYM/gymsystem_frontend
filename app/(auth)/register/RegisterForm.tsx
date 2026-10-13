@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import { FormField } from "@/components/ui/FormField";
 import {
   AuthFooter,
@@ -9,11 +9,13 @@ import {
   AuthSubmitButton,
   AuthTextLink,
 } from "@/components/auth/AuthUI";
+import { signUp, type SignUpState } from "@/app/auth/actions";
 
-// UI only: public sign-up is not wired to Supabase yet. Swap onSubmit for
-// useActionState(signUp, …) from app/auth/actions.ts when it goes live.
+const initialState: SignUpState = {};
+
 export function RegisterForm() {
-  const [submitted, setSubmitted] = useState(false);
+  const [state, formAction, isPending] = useActionState(signUp, initialState);
+  const values = state.values;
 
   return (
     <>
@@ -22,13 +24,7 @@ export function RegisterForm() {
         subtitle="Cadastre-se para acompanhar seus treinos e entrar na academia pelo app."
       />
 
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmitted(true);
-        }}
-      >
+      <form action={formAction} className="space-y-4" aria-busy={isPending}>
         <FormField
           id="full_name"
           name="full_name"
@@ -36,6 +32,7 @@ export function RegisterForm() {
           placeholder="Como está no seu documento"
           required
           autoComplete="name"
+          defaultValue={values?.full_name}
           variant="glass"
         />
         <FormField
@@ -46,6 +43,7 @@ export function RegisterForm() {
           placeholder="seu@email.com"
           required
           autoComplete="email"
+          defaultValue={values?.email}
           variant="glass"
         />
         <FormField
@@ -55,6 +53,7 @@ export function RegisterForm() {
           type="tel"
           placeholder="(00) 00000-0000"
           autoComplete="tel"
+          defaultValue={values?.phone}
           variant="glass"
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
@@ -92,14 +91,11 @@ export function RegisterForm() {
           Li e aceito os termos de uso e a política de privacidade da academia.
         </label>
 
-        {submitted && (
-          <AuthNotice>
-            O cadastro pelo app ainda não está disponível. Procure a recepção da sua academia
-            para criar seu acesso.
-          </AuthNotice>
-        )}
+        {state.error && <AuthNotice tone="error">{state.error}</AuthNotice>}
 
-        <AuthSubmitButton>Criar conta</AuthSubmitButton>
+        <AuthSubmitButton pending={isPending}>
+          {isPending ? "Criando sua conta…" : "Criar conta"}
+        </AuthSubmitButton>
       </form>
 
       <AuthFooter>
