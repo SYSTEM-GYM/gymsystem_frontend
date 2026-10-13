@@ -68,7 +68,7 @@ function CreateGymModal({ onClose }: { onClose: () => void }) {
                 id="gym-name"
                 name="name"
                 type="text"
-                placeholder="Ex: CTC Pequizeiro"
+                placeholder="Ex: GYM CONNECT Centro"
                 required
                 className={inputClass}
               />
