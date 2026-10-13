@@ -411,8 +411,6 @@ export async function sendBroadcast(input: {
 
 // ── Integration (whatsapp-web.js) ─────────────────────────────────────────────
 
-export type { WaIntegrationPublic };
-
 export async function getIntegration(): Promise<WaIntegrationPublic> {
   await requireAdmin();
   try {

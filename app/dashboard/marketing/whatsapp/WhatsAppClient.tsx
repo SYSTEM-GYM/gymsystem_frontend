@@ -28,8 +28,8 @@ import type {
   WaTemplate,
   WaAutomation,
   BroadcastGroup,
-  WaIntegrationPublic,
 } from "./actions";
+import type { WaIntegrationPublic } from "@/lib/whatsapp/backend";
 import {
   getContacts,
   getMessages,
