@@ -377,6 +377,87 @@ export async function createStudentWorkout(input: {
   return { ok: true, collectionId: collection.id };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function updateStudentWorkout(input: {
+  collectionId: string;
+  name: string;
+  exercises: CustomWorkoutExerciseInput[];
+}): Promise<CreateCustomWorkoutResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Não autenticado." };
+
+  const name = input.name.trim();
+  if (name.length < 3) return { ok: false, message: "Dê um nome ao treino (mín. 3 letras)." };
+  if (input.exercises.length === 0) {
+    return { ok: false, message: "Selecione pelo menos um exercício." };
+  }
+  // Ids are interpolated into a PostgREST filter below — accept UUIDs only
+  if (!input.exercises.every((e) => UUID_RE.test(e.exerciseId))) {
+    return { ok: false, message: "Exercício inválido." };
+  }
+
+  // Defense in depth on top of RLS owner policies
+  const { data: owned } = await supabase
+    .from("exercise_collections")
+    .select("id")
+    .eq("id", input.collectionId)
+    .eq("created_by", user.id)
+    .maybeSingle();
+
+  if (!owned) return { ok: false, message: "Você só pode editar treinos criados por você." };
+
+  const { error: colError } = await supabase
+    .from("exercise_collections")
+    .update({
+      name,
+      estimated_duration_minutes: Math.max(20, input.exercises.length * 8),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.collectionId);
+
+  if (colError) {
+    console.error("updateStudentWorkout collection:", colError);
+    return { ok: false, message: "Erro ao salvar o treino." };
+  }
+
+  // Upsert on (collection_id, exercise_id) keeps the row ids of exercises that
+  // stay in the workout, so an in-progress session still maps its sets.
+  const { error: upError } = await supabase.from("collection_exercises").upsert(
+    input.exercises.map((e, idx) => ({
+      collection_id: input.collectionId,
+      exercise_id: e.exerciseId,
+      sort_order: idx,
+      default_sets: Math.min(10, Math.max(1, Math.round(e.sets) || 3)),
+      default_reps: Math.min(100, Math.max(1, Math.round(e.reps) || 12)),
+    })),
+    { onConflict: "collection_id,exercise_id" },
+  );
+
+  if (upError) {
+    console.error("updateStudentWorkout exercises:", upError);
+    return { ok: false, message: "Erro ao salvar os exercícios do treino." };
+  }
+
+  const keptIds = input.exercises.map((e) => e.exerciseId);
+  const { error: delError } = await supabase
+    .from("collection_exercises")
+    .delete()
+    .eq("collection_id", input.collectionId)
+    .not("exercise_id", "in", `(${keptIds.join(",")})`);
+
+  if (delError) {
+    console.error("updateStudentWorkout remove exercises:", delError);
+    return { ok: false, message: "Erro ao remover exercícios do treino." };
+  }
+
+  revalidatePath("/app");
+  return { ok: true, collectionId: input.collectionId };
+}
+
 export async function deleteStudentWorkout(collectionId: string): Promise<LogExerciseResult> {
   const supabase = await createClient();
   const {

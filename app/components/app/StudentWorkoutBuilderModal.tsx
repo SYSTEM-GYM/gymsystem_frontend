@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeftIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  PlusIcon,
   FilmIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
@@ -13,13 +16,21 @@ import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import {
   createStudentWorkout,
   searchStudentExercises,
+  updateStudentWorkout,
   type StudentExerciseResult,
 } from "@/app/app/workout-actions";
 import { MUSCLE_GROUP_LABELS, resolveExerciseMedia } from "@/lib/exercise-utils";
 
 type Step = "pick" | "review";
 
-type SelectedExercise = StudentExerciseResult & { sets: number; reps: number };
+export type SelectedExercise = StudentExerciseResult & { sets: number; reps: number };
+
+/** Existing workout to edit; omitted when creating a new one. */
+export type EditableWorkout = {
+  collectionId: string;
+  name: string;
+  exercises: SelectedExercise[];
+};
 
 function ExerciseTile({
   exercise,
@@ -84,13 +95,22 @@ function ExerciseTile({
   );
 }
 
-export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void }) {
+export function StudentWorkoutBuilderModal({
+  editing,
+  onClose,
+}: {
+  editing?: EditableWorkout;
+  onClose: () => void;
+}) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("pick");
-  const [name, setName] = useState("");
+  const isEdit = !!editing;
+  const [step, setStep] = useState<Step>(isEdit ? "review" : "pick");
+  const [name, setName] = useState(editing?.name ?? "");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Map<string, SelectedExercise>>(new Map());
+  const [selected, setSelected] = useState<Map<string, SelectedExercise>>(
+    () => new Map((editing?.exercises ?? []).map((e) => [e.id, e])),
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const searchSeq = useRef(0);
@@ -137,17 +157,31 @@ export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void })
     });
   }
 
+  function move(id: string, delta: -1 | 1) {
+    setSelected((prev) => {
+      const entries = [...prev.entries()];
+      const from = entries.findIndex(([key]) => key === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= entries.length) return prev;
+      [entries[from], entries[to]] = [entries[to], entries[from]];
+      return new Map(entries);
+    });
+  }
+
   function handleSave() {
     setError(null);
     startSaving(async () => {
-      const result = await createStudentWorkout({
+      const payload = {
         name,
         exercises: selectedList.map((e) => ({
           exerciseId: e.id,
           sets: e.sets,
           reps: e.reps,
         })),
-      });
+      };
+      const result = editing
+        ? await updateStudentWorkout({ collectionId: editing.collectionId, ...payload })
+        : await createStudentWorkout(payload);
       if (result.ok) {
         router.refresh();
         onClose();
@@ -164,19 +198,28 @@ export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void })
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 pt-safe-top pt-4 pb-3 border-b border-white/5 bg-surface-1/80 backdrop-blur-sm shrink-0">
-        <button
-          type="button"
-          onClick={() => (step === "review" ? setStep("pick") : onClose())}
-          className="p-2 -ml-2 rounded-xl text-zinc-500 hover:text-white transition-colors min-h-11 min-w-11 flex items-center justify-center"
-        >
-          {step === "review" ? <ArrowLeftIcon className="w-5 h-5" /> : <XMarkIcon className="w-5 h-5" />}
-        </button>
+        {(() => {
+          // Create starts on "pick" (review is a step forward); edit starts on
+          // "review" (pick is a detour to add exercises).
+          const homeStep: Step = isEdit ? "review" : "pick";
+          const atHome = step === homeStep;
+          return (
+            <button
+              type="button"
+              onClick={() => (atHome ? onClose() : setStep(homeStep))}
+              aria-label={atHome ? "Fechar" : "Voltar"}
+              className="p-2 -ml-2 rounded-xl text-zinc-500 hover:text-white transition-colors min-h-11 min-w-11 flex items-center justify-center"
+            >
+              {atHome ? <XMarkIcon className="w-5 h-5" /> : <ArrowLeftIcon className="w-5 h-5" />}
+            </button>
+          );
+        })()}
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-semibold text-primary uppercase tracking-widest">
-            Criar Meu Treino
+            {isEdit ? "Editar Treino" : "Criar Meu Treino"}
           </p>
           <p className="text-sm font-black text-white">
-            {step === "pick" ? "Escolha os exercícios" : "Revise e salve"}
+            {step === "pick" ? "Escolha os exercícios" : isEdit ? "Ajuste e salve" : "Revise e salve"}
           </p>
         </div>
         <span className="text-xs font-bold text-primary tabular-nums shrink-0">
@@ -333,6 +376,28 @@ export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void })
                       </div>
                     </div>
                   </div>
+                  <div className="flex flex-col shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => move(ex.id, -1)}
+                      disabled={idx === 0}
+                      className="p-1.5 text-zinc-500 hover:text-white transition-colors disabled:opacity-20"
+                      title="Mover para cima"
+                      aria-label="Mover para cima"
+                    >
+                      <ChevronUpIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(ex.id, 1)}
+                      disabled={idx === selectedList.length - 1}
+                      className="p-1.5 text-zinc-500 hover:text-white transition-colors disabled:opacity-20"
+                      title="Mover para baixo"
+                      aria-label="Mover para baixo"
+                    >
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => toggle(ex)}
@@ -343,6 +408,14 @@ export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void })
                   </button>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={() => setStep("pick")}
+                className="w-full min-h-12 rounded-2xl border border-dashed border-white/15 text-sm font-bold text-zinc-400 hover:border-primary/40 hover:text-primary transition-colors flex items-center justify-center gap-2"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Adicionar exercícios
+              </button>
             </div>
           </div>
 
@@ -356,7 +429,7 @@ export function StudentWorkoutBuilderModal({ onClose }: { onClose: () => void })
               className="w-full min-h-13 rounded-2xl bg-primary text-black font-black text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
             >
               <CheckIcon className="w-5 h-5" />
-              {saving ? "Salvando..." : "Salvar Treino"}
+              {saving ? "Salvando..." : isEdit ? "Salvar Alterações" : "Salvar Treino"}
             </button>
           </div>
         </>

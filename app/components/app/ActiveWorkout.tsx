@@ -8,12 +8,14 @@ import {
   FilmIcon,
   FireIcon,
   PlayCircleIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { saveWorkoutLog, type SetLogInput } from "@/app/app/workout-actions";
 import { useWorkoutSession, type SetState } from "@/lib/workout-session-store";
 import { resolveExerciseMedia } from "@/lib/exercise-utils";
 import { ExerciseVideoModal } from "./ExerciseVideoModal";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const DEFAULT_REST_SECONDS = 60;
 
@@ -395,6 +397,7 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
   const [done, setDone] = useState(false);
   const [xpAwarded, setXpAwarded] = useState(0);
   const [showEarlyFinish, setShowEarlyFinish] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const finishedRef = useRef(false);
 
   if (!session) return null;
@@ -535,17 +538,40 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
             {error && (
               <p className="text-xs text-danger text-center mb-2">{error}</p>
             )}
-            <button
-              type="button"
-              onClick={handleFinishClick}
-              disabled={pending}
-              className="w-full min-h-13 rounded-2xl bg-primary text-black font-black hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-            >
-              <FireIcon className="w-5 h-5" />
-              {pending ? "Salvando..." : "Finalizar Treino"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCancel(true)}
+                disabled={pending}
+                className="min-h-13 px-4 rounded-2xl bg-surface-1 border border-white/10 text-zinc-300 font-bold text-sm hover:border-danger/40 hover:text-danger active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                <XMarkIcon className="w-4 h-4" />
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishClick}
+                disabled={pending}
+                className="flex-1 min-h-13 rounded-2xl bg-primary text-black font-black hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                <FireIcon className="w-5 h-5" />
+                {pending ? "Salvando..." : "Finalizar Treino"}
+              </button>
+            </div>
           </div>
         </>
+      )}
+
+      {showCancel && (
+        <ConfirmDialog
+          title="Cancelar treino?"
+          message="A sessão será descartada: nenhuma série fica salva e você não ganha XP."
+          confirmLabel="Cancelar treino"
+          cancelLabel="Continuar treinando"
+          destructive
+          onConfirm={endSession}
+          onCancel={() => setShowCancel(false)}
+        />
       )}
 
       {showEarlyFinish && (

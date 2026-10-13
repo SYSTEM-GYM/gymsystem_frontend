@@ -207,7 +207,7 @@ function FeedTab({ feed, currentUserId, squadCollectionIds }: { feed: FeedEntry[
       {feed.map((entry) => {
         const name = displayName(entry);
         const isMe = entry.student_id === currentUserId;
-        const isSquadWorkout = squadCollectionIds.has(entry.collection_id);
+        const isSquadWorkout = entry.collection_id !== null && squadCollectionIds.has(entry.collection_id);
         return (
           <div key={entry.id} className={`flex gap-3 p-3 rounded-2xl border ${isSquadWorkout ? "bg-primary/5 border-primary/15" : "bg-surface-1/40 border-white/5"}`}>
             <Avatar photo_url={entry.photo_url} name={name} size="sm" />

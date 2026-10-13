@@ -5,40 +5,53 @@ import { useRouter } from "next/navigation";
 import {
   BoltIcon,
   ClockIcon,
-  PlayCircleIcon,
+  EyeIcon,
+  PencilSquareIcon,
   PlusIcon,
   SparklesIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import type { StudentWorkoutItem } from "@/lib/workout-utils";
 import { deleteStudentWorkout } from "@/app/app/workout-actions";
+import { useWorkoutSession } from "@/lib/workout-session-store";
 import { WorkoutPreviewModal } from "./WorkoutPreviewModal";
-import { StudentWorkoutBuilderModal } from "./StudentWorkoutBuilderModal";
+import { StudentWorkoutBuilderModal, type EditableWorkout } from "./StudentWorkoutBuilderModal";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type Props = {
   workouts: StudentWorkoutItem[];
   lastLogs: Record<string, { weight_kg: number | null; reps_done: number | null }>;
 };
 
+function toEditable(workout: StudentWorkoutItem): EditableWorkout {
+  return {
+    collectionId: workout.collectionId,
+    name: workout.collectionName,
+    exercises: workout.exercises.map((row) => ({
+      id: row.exercise_id,
+      title: row.exercise.title,
+      translated_name: row.exercise.translated_name,
+      muscle_group: null,
+      youtube_url: row.exercise.youtube_url,
+      webm_path: row.exercise.webm_path,
+      video_url: row.exercise.video_url,
+      sets: row.default_sets,
+      reps: row.default_reps,
+    })),
+  };
+}
+
 function WorkoutCard({
   workout,
-  onStart,
+  onOpen,
+  onEdit,
+  onDelete,
 }: {
   workout: StudentWorkoutItem;
-  onStart: () => void;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
-  const router = useRouter();
-  const [deleting, startDeleting] = useTransition();
-
-  function handleDelete() {
-    if (!confirm(`Excluir o treino "${workout.collectionName}"?`)) return;
-    startDeleting(async () => {
-      const result = await deleteStudentWorkout(workout.collectionId);
-      if (result.ok) router.refresh();
-      else alert(result.message);
-    });
-  }
-
   return (
     <div
       className={`snap-start shrink-0 w-[78%] max-w-75 bg-surface-1 border rounded-3xl overflow-hidden flex flex-col ${
@@ -71,15 +84,26 @@ function WorkoutCard({
               )}
             </div>
             {workout.createdByMe && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleting}
-                title="Excluir treino"
-                className="p-1 -mr-1 -mt-1 text-zinc-700 hover:text-danger transition-colors disabled:opacity-40 shrink-0"
-              >
-                <TrashIcon className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1 -mr-1.5 -mt-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  title="Editar treino"
+                  aria-label={`Editar ${workout.collectionName}`}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-400 hover:text-white hover:bg-white/8 transition-colors"
+                >
+                  <PencilSquareIcon className="w-4.5 h-4.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  title="Excluir treino"
+                  aria-label={`Excluir ${workout.collectionName}`}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-400 hover:text-danger hover:bg-danger/10 transition-colors"
+                >
+                  <TrashIcon className="w-4.5 h-4.5" />
+                </button>
+              </div>
             )}
           </div>
           <h3 className="font-black text-white leading-tight line-clamp-2 mt-1">
@@ -124,16 +148,15 @@ function WorkoutCard({
 
         <button
           type="button"
-          onClick={onStart}
-          disabled={workout.exercises.length === 0}
-          className={`w-full min-h-12 font-black text-sm rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 ${
+          onClick={onOpen}
+          className={`w-full min-h-12 font-black text-sm rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
             workout.suggestedToday
               ? "bg-primary text-black hover:opacity-90"
               : "bg-surface-2 text-white border border-white/10 hover:border-primary/40"
           }`}
         >
-          <PlayCircleIcon className="w-5 h-5" />
-          Iniciar Treino
+          <EyeIcon className="w-5 h-5" />
+          Ver Treino
         </button>
       </div>
     </div>
@@ -161,8 +184,41 @@ function CreateWorkoutCard({ onClick }: { onClick: () => void }) {
 }
 
 export function WorkoutShelf({ workouts, lastLogs }: Props) {
+  const router = useRouter();
+  const { session, endSession } = useWorkoutSession();
   const [preview, setPreview] = useState<StudentWorkoutItem | null>(null);
-  const [showBuilder, setShowBuilder] = useState(false);
+  // null = closed, "new" = create, otherwise the workout being edited
+  const [builder, setBuilder] = useState<"new" | EditableWorkout | null>(null);
+  const [toDelete, setToDelete] = useState<StudentWorkoutItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, startDeleting] = useTransition();
+
+  function openEdit(workout: StudentWorkoutItem) {
+    setPreview(null);
+    setBuilder(toEditable(workout));
+  }
+
+  function askDelete(workout: StudentWorkoutItem) {
+    setPreview(null);
+    setDeleteError(null);
+    setToDelete(workout);
+  }
+
+  function confirmDelete() {
+    if (!toDelete) return;
+    const target = toDelete;
+    startDeleting(async () => {
+      const result = await deleteStudentWorkout(target.collectionId);
+      if (!result.ok) {
+        setDeleteError(result.message);
+        return;
+      }
+      // A session of a deleted workout could never be saved
+      if (session?.workout.collectionId === target.collectionId) endSession();
+      setToDelete(null);
+      router.refresh();
+    });
+  }
 
   return (
     <>
@@ -198,10 +254,12 @@ export function WorkoutShelf({ workouts, lastLogs }: Props) {
             <WorkoutCard
               key={w.collectionId}
               workout={w}
-              onStart={() => setPreview(w)}
+              onOpen={() => setPreview(w)}
+              onEdit={() => openEdit(w)}
+              onDelete={() => askDelete(w)}
             />
           ))}
-          <CreateWorkoutCard onClick={() => setShowBuilder(true)} />
+          <CreateWorkoutCard onClick={() => setBuilder("new")} />
         </div>
       </div>
 
@@ -210,11 +268,31 @@ export function WorkoutShelf({ workouts, lastLogs }: Props) {
           workout={preview}
           lastLogs={lastLogs}
           onClose={() => setPreview(null)}
+          onEdit={preview.createdByMe ? () => openEdit(preview) : undefined}
+          onDelete={preview.createdByMe ? () => askDelete(preview) : undefined}
         />
       )}
 
-      {showBuilder && (
-        <StudentWorkoutBuilderModal onClose={() => setShowBuilder(false)} />
+      {builder && (
+        <StudentWorkoutBuilderModal
+          editing={builder === "new" ? undefined : builder}
+          onClose={() => setBuilder(null)}
+        />
+      )}
+
+      {toDelete && (
+        <ConfirmDialog
+          title={`Excluir "${toDelete.collectionName}"?`}
+          message={
+            deleteError ??
+            "O treino sai da sua lista. Seu histórico de execuções e o XP já ganho são mantidos."
+          }
+          confirmLabel="Excluir treino"
+          destructive
+          pending={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setToDelete(null)}
+        />
       )}
     </>
   );

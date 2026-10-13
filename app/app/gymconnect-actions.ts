@@ -388,7 +388,7 @@ export type FeedEntry = {
   first_name: string | null;
   full_name: string | null;
   photo_url: string | null;
-  collection_id: string;
+  collection_id: string | null; // null once the workout was deleted
   collection_name: string;
   finished_at: string | null;
   created_at: string;
@@ -547,7 +547,7 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
   }
 
   // Collection names for feed
-  const collectionIds = [...new Set((workoutLogs ?? []).slice(0, 30).map((l) => l.collection_id))];
+  const collectionIds = [...new Set((workoutLogs ?? []).slice(0, 30).map((l) => l.collection_id).filter(Boolean))];
   const { data: collectionsMeta } = collectionIds.length > 0
     ? await admin.from("exercise_collections").select("id, name").in("id", collectionIds)
     : { data: [] };
@@ -578,7 +578,7 @@ export async function getSquadDetail(squadId: string, requestingUserId: string):
       full_name: profile?.full_name ?? null,
       photo_url: profile?.photo_url ?? null,
       collection_id: log.collection_id,
-      collection_name: collectionMap.get(log.collection_id) ?? "Treino",
+      collection_name: (log.collection_id && collectionMap.get(log.collection_id)) || "Treino",
       finished_at: log.finished_at,
       created_at: log.created_at,
     };
