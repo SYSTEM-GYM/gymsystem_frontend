@@ -11,32 +11,59 @@ import {
 } from "recharts";
 import type { MuscleVolume } from "@/app/app/workout-actions";
 
-// Map raw ExerciseDB primary_muscle → radar category
+// Map raw primary_muscle → radar category. Covers both vocabularies present in
+// exercises.primary_muscle (ExerciseDB: "pectorals", free-exercise-db: "chest")
+// plus the pt-BR names written by gym_importer/translator.js.
 const MUSCLE_TO_CATEGORY: Record<string, string> = {
   pectorals:       "Peito",
+  chest:           "Peito",
   "upper chest":   "Peito",
+  peitorais:       "Peito",
   lats:            "Costas",
   traps:           "Costas",
   "upper back":    "Costas",
+  "middle back":   "Costas",
   "lower back":    "Costas",
   spine:           "Costas",
+  neck:            "Costas",
+  "latíssimo do dorso": "Costas",
+  "trapézio":      "Costas",
+  "costas superiores": "Costas",
+  "coluna vertebral": "Costas",
   quads:           "Pernas",
   quadriceps:      "Pernas",
   hamstrings:      "Pernas",
   glutes:          "Pernas",
   calves:          "Pernas",
+  abductors:       "Pernas",
+  adductors:       "Pernas",
+  "quadríceps":    "Pernas",
+  isquiotibiais:   "Pernas",
+  "glúteos":       "Pernas",
+  panturrilhas:    "Pernas",
+  abdutores:       "Pernas",
+  adutores:        "Pernas",
   biceps:          "Braços",
   triceps:         "Braços",
   forearms:        "Braços",
+  "bíceps":        "Braços",
+  "tríceps":       "Braços",
+  "antebraços":    "Braços",
   delts:           "Ombros",
+  shoulders:       "Ombros",
   "front delts":   "Ombros",
   "rear delts":    "Ombros",
   "lateral delts": "Ombros",
+  deltoides:       "Ombros",
   abs:             "Core",
+  abdominals:      "Core",
   "upper abs":     "Core",
   "lower abs":     "Core",
   serratus:        "Core",
+  "serratus anterior": "Core",
   obliques:        "Core",
+  "abdômen":       "Core",
+  "serrátil anterior": "Core",
 };
 
 const CATEGORIES = ["Peito", "Costas", "Pernas", "Braços", "Ombros", "Core"] as const;
@@ -68,7 +95,7 @@ export function MuscleRadarChart({ volume }: Props) {
     for (const cat of CATEGORIES) totals[cat] = 0;
 
     for (const [muscle, vol] of Object.entries(volume)) {
-      const cat = MUSCLE_TO_CATEGORY[muscle.toLowerCase()];
+      const cat = MUSCLE_TO_CATEGORY[muscle.toLowerCase().trim()];
       if (cat) totals[cat] = (totals[cat] ?? 0) + vol;
     }
 

@@ -407,18 +407,16 @@ export async function getMuscleHeatmapData(): Promise<MuscleVolume> {
 
   const { data: sets } = await supabase
     .from("set_logs")
-    .select("weight_kg, reps_completed, exercise:exercise_id(primary_muscle)")
+    .select("exercise:exercise_id(primary_muscle)")
     .in("workout_log_id", wlogIds);
 
+  // Completed sets per muscle — the radar labels its values as "séries"
   const volume: MuscleVolume = {};
   for (const row of sets ?? []) {
     const ex = row.exercise as unknown as { primary_muscle: string | null } | null;
     const muscle = ex?.primary_muscle;
     if (!muscle) continue;
-    const vol =
-      ((row.weight_kg as number | null) ?? 20) *
-      ((row.reps_completed as number | null) ?? 1);
-    volume[muscle] = (volume[muscle] ?? 0) + vol;
+    volume[muscle] = (volume[muscle] ?? 0) + 1;
   }
 
   return volume;
