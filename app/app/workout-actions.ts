@@ -41,6 +41,7 @@ export async function logExerciseExecution(input: {
 }
 
 export type SetLogInput = {
+  rowId: string; // collection_exercises.id the set belongs to
   exerciseId: string;
   setNumber: number;
   weightKg: number | null;
@@ -60,9 +61,33 @@ function streakMultiplier(streak: number): number {
   return 1;
 }
 
+const XP_PER_EXERCISE = 7;
+
+// An exercise counts as completed when every planned set of its collection row
+// was marked done. Planned sets come from the DB, never from the client.
+async function countCompletedExercises(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  collectionId: string,
+  sets: SetLogInput[],
+): Promise<number> {
+  const { data: rows } = await supabase
+    .from("collection_exercises")
+    .select("id, default_sets")
+    .eq("collection_id", collectionId);
+
+  const doneSetsByRow: Record<string, Set<number>> = {};
+  for (const s of sets) (doneSetsByRow[s.rowId] ??= new Set()).add(s.setNumber);
+
+  return (rows ?? []).filter((r: { id: string; default_sets: number }) => {
+    const done = doneSetsByRow[r.id]?.size ?? 0;
+    return r.default_sets > 0 && done >= r.default_sets;
+  }).length;
+}
+
 async function updateStreakAndXP(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
+  completedExercises: number,
 ): Promise<{ xpAwarded: number; newStreak: number }> {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -82,6 +107,12 @@ async function updateStreakAndXP(
   // Already worked out today — no extra XP
   if (lastDate === today) return { xpAwarded: 0, newStreak: currentStreak };
 
+  // Nothing completed — not a workout day: no XP, streak untouched, so a real
+  // workout later today still counts.
+  if (completedExercises === 0) return { xpAwarded: 0, newStreak: currentStreak };
+
+  const baseXP = completedExercises * XP_PER_EXERCISE;
+
   const yd = new Date();
   yd.setDate(yd.getDate() - 1);
   const yesterdayStr = yd.toISOString().slice(0, 10);
@@ -92,7 +123,7 @@ async function updateStreakAndXP(
   if (!lastDate || lastDate === yesterdayStr) {
     // Consecutive day (or first-ever workout)
     newStreak = currentStreak + 1;
-    xpDelta = Math.round(40 * streakMultiplier(newStreak));
+    xpDelta = Math.round(baseXP * streakMultiplier(newStreak));
   } else {
     // Streak is breaking — check for an approved squad rescue for yesterday
     const { data: rescue } = await supabase
@@ -104,14 +135,14 @@ async function updateStreakAndXP(
       .maybeSingle();
 
     if (rescue) {
-      // Rescue active: maintain streak, skip penalty, award base XP
+      // Rescue active: maintain streak, skip penalty, award streak XP
       newStreak = currentStreak + 1;
-      xpDelta = Math.round(40 * streakMultiplier(newStreak));
+      xpDelta = Math.round(baseXP * streakMultiplier(newStreak));
     } else {
       // Genuine break — flat penalty, not percentage-based
       const penalty = currentStreak >= 3 ? Math.min(150, Math.round(currentXP * 0.04)) : 0;
       newStreak = 1;
-      xpDelta = 40 - penalty;
+      xpDelta = baseXP - penalty;
     }
   }
 
@@ -202,7 +233,8 @@ export async function saveWorkoutLog(input: {
     })),
   );
 
-  const { xpAwarded, newStreak } = await updateStreakAndXP(supabase, user.id);
+  const completedExercises = await countCompletedExercises(supabase, input.collectionId, input.sets);
+  const { xpAwarded, newStreak } = await updateStreakAndXP(supabase, user.id, completedExercises);
 
   revalidatePath("/app");
   return { ok: true, workoutLogId: workoutLog.id, xpAwarded, newStreak };

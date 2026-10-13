@@ -318,7 +318,7 @@ function ExerciseCard({
 
 // ── Success Screen ────────────────────────────────────────────────────────────
 
-function SuccessScreen({ onClose }: { onClose: () => void }) {
+function SuccessScreen({ xpAwarded, onClose }: { xpAwarded: number; onClose: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center flex-1 gap-6 text-center px-6 py-16">
       <div className="w-20 h-20 rounded-full bg-primary/15 flex items-center justify-center">
@@ -329,6 +329,11 @@ function SuccessScreen({ onClose }: { onClose: () => void }) {
         <p className="text-sm text-zinc-400 mt-2">
           Carga registrada com sucesso. Continue assim! 💪
         </p>
+        {xpAwarded > 0 && (
+          <p className="mt-4 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/15 text-primary text-sm font-black tabular-nums">
+            +{xpAwarded} XP
+          </p>
+        )}
       </div>
       <button
         type="button"
@@ -388,6 +393,7 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [xpAwarded, setXpAwarded] = useState(0);
   const [showEarlyFinish, setShowEarlyFinish] = useState(false);
   const finishedRef = useRef(false);
 
@@ -427,6 +433,7 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
         const s = sets[i];
         if (!s.done) continue;
         allSets.push({
+          rowId: row.id,
           exerciseId: row.exercise_id,
           setNumber: i + 1,
           weightKg: s.weight ? parseFloat(s.weight) : null,
@@ -444,6 +451,7 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
       });
       if (result.ok) {
         finishedRef.current = true;
+        setXpAwarded(result.xpAwarded);
         setDone(true);
       } else {
         setError(result.message);
@@ -499,7 +507,7 @@ export function ActiveWorkout({ onMinimize }: { onMinimize: () => void }) {
 
       {/* Body */}
       {done ? (
-        <SuccessScreen onClose={handleClose} />
+        <SuccessScreen xpAwarded={xpAwarded} onClose={handleClose} />
       ) : (
         <>
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 pb-28">
