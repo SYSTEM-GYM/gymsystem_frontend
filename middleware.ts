@@ -7,6 +7,9 @@ const ADMIN_ONLY_ROUTES = ["/dashboard/members", "/dashboard/finance", "/dashboa
 // Routes that require any authenticated user
 const APP_ROUTES = ["/app"];
 
+// Public auth screens — signed-in users are bounced to their home
+const AUTH_ROUTES = ["/login", "/register", "/forgot-password"];
+
 // White-label subdomains that don't map to a tenant (e.g. app.oursystem.com, www.oursystem.com)
 const RESERVED_SUBDOMAINS = new Set(["www", "app"]);
 
@@ -71,12 +74,9 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // /register is removed — public sign-up is disabled, admins register students directly
-  if (pathname.startsWith("/register")) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  const isAuthRoute = pathname.startsWith("/login");
+  // /register and /forgot-password are UI-only for now (no Supabase calls) —
+  // students are still registered by admins via registerStudent.
+  const isAuthRoute = AUTH_ROUTES.some((r) => pathname.startsWith(r));
 
   if (!user && !isAuthRoute) {
     // Protect both /dashboard and /app

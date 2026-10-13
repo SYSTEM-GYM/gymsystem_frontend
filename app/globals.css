@@ -17,6 +17,27 @@
   /* Aliases used by Tailwind utilities */
   --color-background: var(--color-base);
   --color-foreground: #ffffff;
+
+  /* Auth screens — greens sampled from the GYM CONNECT logo ring */
+  --color-forest: #03110a;
+  --color-pine:   #0a2a17;
+  --color-leaf:   #6cb52d;
+  --color-volt:   #9be342;
+  --color-bone:   #eef3ec;
+  --color-moss:   #8fa597;
+
+  /* Logo-ring stroke drawing in on the auth screens (motion-safe only) */
+  --animate-ring-draw: ring-draw 1.8s cubic-bezier(0.65, 0, 0.35, 1) 0.2s both;
+
+  @keyframes ring-draw {
+    from { stroke-dasharray: 0 100; }
+    to   { stroke-dasharray: 78 22; }
+  }
+}
+
+@theme inline {
+  /* Condensed athletic display face, loaded only by app/(auth)/layout.tsx */
+  --font-display: var(--font-barlow), "Arial Narrow", ui-sans-serif, sans-serif;
 }
 
 *,

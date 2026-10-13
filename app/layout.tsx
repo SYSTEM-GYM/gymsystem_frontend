@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   title: "CM Gym Connect - Academia",
   description: "Plataforma gamificada para gestão de academias",
   manifest: "/manifest.json",
+  // /favicon.ico is served by the app/favicon.ico file convention
+  icons: {
+    icon: [{ url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
