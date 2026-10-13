@@ -3,8 +3,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { backendUrl } from "@/lib/backend-url";
 
 export type AuthActionState = {
   error?: string;
@@ -23,6 +21,11 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    if (error.code === "email_not_confirmed") {
+      return {
+        error: "Confirme seu e-mail antes de entrar. O link de ativação está na sua caixa de entrada.",
+      };
+    }
     return { error: "E-mail ou senha inválidos. Tente novamente." };
   }
 
@@ -30,47 +33,31 @@ export async function signIn(
 }
 
 export type SignUpState = AuthActionState & {
+  /** E-mail the confirmation link was sent to (success screen). */
+  sentTo?: string;
   /** Echoed back on error so the form keeps what the user typed (never passwords). */
   values?: { full_name: string; email: string; phone: string };
 };
 
-/** Gym of the white-label subdomain the user is signing up on, if any. */
-async function resolveTenantGymId(): Promise<string | null> {
-  const slug = (await headers()).get("x-tenant-slug");
-  if (!slug) return null;
-
-  const { data } = await createAdminClient()
-    .from("gyms")
-    .select("id")
-    .eq("slug", slug)
-    .maybeSingle();
-  return data?.id ?? null;
+/** Absolute URL of this deployment, for the confirmation link redirect. */
+async function siteOrigin(): Promise<string> {
+  // Server Actions are POSTs, so browsers always send Origin (and Next.js
+  // rejects actions whose Origin doesn't match the host).
+  const origin = (await headers()).get("origin");
+  return origin ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
 
 /**
- * This request reaches the backend from the Next server, so the backend would
- * see the same IP for every user. Forward the real client IP for its per-IP
- * rate limit; the backend only trusts it alongside the shared internal key.
- */
-async function clientIpHeaders(): Promise<Record<string, string>> {
-  const key = process.env.INTERNAL_API_KEY;
-  const h = await headers();
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip")?.trim();
-  return key && ip ? { "X-Internal-Api-Key": key, "X-Client-IP": ip } : {};
-}
-
-/**
- * Self-service sign-up through the NestJS backend (POST /api/auth/register),
- * which creates an already-confirmed account via the Supabase Admin API — no
- * confirmation e-mail. On success the user is signed in and sent to /app.
+ * Self-service sign-up with Supabase Auth's native flow: the account is
+ * created unconfirmed and Supabase e-mails a confirmation link (SMTP via
+ * Resend). The link lands on /auth/confirm, which starts the session.
  */
 export async function signUp(
   _prev: SignUpState,
   formData: FormData
 ): Promise<SignUpState> {
-  const fullName = String(formData.get("full_name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
+  const fullName = String(formData.get("full_name") ?? "").trim().replace(/\s+/g, " ");
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const phone = String(formData.get("phone") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const passwordConfirm = String(formData.get("password_confirm") ?? "");
@@ -89,49 +76,41 @@ export async function signUp(
     return { error: "Aceite os termos de uso para criar sua conta.", values };
   }
 
-  const gymId = await resolveTenantGymId();
-
-  let res: Response;
-  try {
-    res = await fetch(`${backendUrl()}/api/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(await clientIpHeaders()) },
-      body: JSON.stringify({
-        email,
-        password,
-        full_name: fullName,
-        ...(phone && { phone }),
-        ...(gymId && { gym_id: gymId }),
-      }),
-      cache: "no-store",
-    });
-  } catch {
-    return {
-      error: "Não foi possível conectar ao servidor. Tente novamente em instantes.",
-      values,
-    };
-  }
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string | string[] };
-    const message = Array.isArray(body.message) ? body.message[0] : body.message;
-    return {
-      error:
-        res.status < 500 && message
-          ? message
-          : "Não foi possível criar sua conta. Tente novamente.",
-      values,
-    };
-  }
-
-  // Account exists and is confirmed — sign in right away.
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${await siteOrigin()}/auth/confirm`,
+      // full_name is read by the handle_new_user trigger; phone is copied to
+      // the profile only after the e-mail is confirmed (see /auth/confirm).
+      data: { full_name: fullName, ...(phone && { phone }) },
+    },
+  });
+
   if (error) {
-    redirect("/login?registered=1");
+    return { error: signUpErrorMessage(error.code), values };
   }
 
-  redirect("/app");
+  // Same response whether or not the e-mail was already registered —
+  // Supabase doesn't reveal it, and neither do we.
+  return { sentTo: email };
+}
+
+function signUpErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case "over_email_send_rate_limit":
+    case "over_request_rate_limit":
+      return "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+    case "weak_password":
+      return "Senha muito fraca. Use letras, números e pelo menos 8 caracteres.";
+    case "email_address_invalid":
+      return "Informe um e-mail válido.";
+    case "signup_disabled":
+      return "O cadastro pelo app está desativado. Procure a recepção da sua academia.";
+    default:
+      return "Não foi possível criar sua conta. Tente novamente.";
+  }
 }
 
 export async function signOut(): Promise<void> {

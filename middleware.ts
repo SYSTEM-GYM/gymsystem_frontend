@@ -74,7 +74,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // /register signs up through the NestJS backend (POST /api/auth/register);
+  // /register uses Supabase Auth signUp + e-mail confirmation (/auth/confirm);
   // /forgot-password is still UI-only.
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname.startsWith(r));
 

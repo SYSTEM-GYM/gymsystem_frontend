@@ -8,12 +8,14 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ registered?: string }>;
+  searchParams: Promise<{ confirm?: string }>;
 }) {
-  // ?registered=1 → sign-up succeeded but the automatic sign-in didn't
-  const { registered } = await searchParams;
-  const notice =
-    registered === "1" ? "Conta criada. Entre com seu e-mail e senha." : undefined;
+  // ?confirm=error → /auth/confirm couldn't verify the e-mail link
+  const { confirm } = await searchParams;
+  const error =
+    confirm === "error"
+      ? "Link de confirmação inválido ou expirado. Entre com seu e-mail e senha; se a conta ainda não estiver ativa, faça o cadastro de novo para receber outro link."
+      : undefined;
 
-  return <LoginForm notice={notice} />;
+  return <LoginForm initialError={error} />;
 }
