@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import { FormField } from "@/components/ui/FormField";
 import {
   AuthFooter,
@@ -9,11 +9,12 @@ import {
   AuthSubmitButton,
   AuthTextLink,
 } from "@/components/auth/AuthUI";
+import { requestPasswordReset, type PasswordResetState } from "@/app/auth/actions";
 
-// UI only: not wired to Supabase yet. Replace onSubmit with a server action
-// calling supabase.auth.resetPasswordForEmail when the flow goes live.
-export function ForgotPasswordForm() {
-  const [submitted, setSubmitted] = useState(false);
+const initialState: PasswordResetState = {};
+
+export function ForgotPasswordForm({ initialError }: { initialError?: string }) {
+  const [state, formAction, isPending] = useActionState(requestPasswordReset, initialState);
 
   return (
     <>
@@ -22,13 +23,7 @@ export function ForgotPasswordForm() {
         subtitle="Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha."
       />
 
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmitted(true);
-        }}
-      >
+      <form action={formAction} className="space-y-4">
         <FormField
           id="email"
           name="email"
@@ -38,16 +33,18 @@ export function ForgotPasswordForm() {
           required
           autoComplete="email"
           variant="glass"
+          defaultValue={state.email}
         />
 
-        {submitted && (
-          <AuthNotice>
-            A redefinição por e-mail ainda não está disponível. Fale com a recepção da sua
-            academia para trocar sua senha.
-          </AuthNotice>
+        {/* Once the form is submitted, the action result replaces the link-expired notice */}
+        {(state.error ?? (state.success ? undefined : initialError)) && (
+          <AuthNotice tone="error">{state.error ?? initialError}</AuthNotice>
         )}
+        {state.success && <AuthNotice>{state.success}</AuthNotice>}
 
-        <AuthSubmitButton>Enviar link de redefinição</AuthSubmitButton>
+        <AuthSubmitButton pending={isPending}>
+          {isPending ? "Enviando…" : "Enviar link de redefinição"}
+        </AuthSubmitButton>
       </form>
 
       <AuthFooter>

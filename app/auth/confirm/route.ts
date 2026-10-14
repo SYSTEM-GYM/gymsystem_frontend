@@ -9,12 +9,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
  *                           same browser where the sign-up happened.
  * - ?token_hash=…&type=…    custom template; works on any device.
  * On success the session cookies are set and the user goes to /app.
+ *
+ * Password recovery links (type=recovery — set by Supabase on token_hash
+ * links, and by requestPasswordReset's redirectTo on PKCE links) go to
+ * /reset-password instead, to choose the new password.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
+  const isRecovery = type === "recovery";
 
   const supabase = await createClient();
   let user: User | null = null;
@@ -28,7 +33,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login?confirm=error", request.url));
+    const failure = isRecovery ? "/forgot-password?link=expired" : "/login?confirm=error";
+    return NextResponse.redirect(new URL(failure, request.url));
+  }
+
+  if (isRecovery) {
+    return NextResponse.redirect(new URL("/reset-password", request.url));
   }
 
   await completeProfile(user);

@@ -19,7 +19,11 @@ import {
   updateStudentWorkout,
   type StudentExerciseResult,
 } from "@/app/app/workout-actions";
-import { MUSCLE_GROUP_LABELS, resolveExerciseMedia } from "@/lib/exercise-utils";
+import {
+  FILTERABLE_MUSCLE_GROUPS,
+  MUSCLE_GROUP_LABELS,
+  resolveExerciseMedia,
+} from "@/lib/exercise-utils";
 
 type Step = "pick" | "review";
 
@@ -253,7 +257,7 @@ export function StudentWorkoutBuilderModal({
               >
                 Todos
               </button>
-              {Object.entries(MUSCLE_GROUP_LABELS).map(([value, label]) => (
+              {FILTERABLE_MUSCLE_GROUPS.map(([value, label]) => (
                 <button
                   key={value}
                   type="button"

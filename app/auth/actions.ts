@@ -113,6 +113,93 @@ function signUpErrorMessage(code: string | undefined): string {
   }
 }
 
+export type PasswordResetState = AuthActionState & {
+  /** Echoed back on error so the form keeps the typed e-mail. */
+  email?: string;
+};
+
+/**
+ * Sends Supabase's password recovery e-mail. The link lands on /auth/confirm
+ * (type=recovery), which verifies it and starts the session.
+ */
+export async function requestPasswordReset(
+  _prev: PasswordResetState,
+  formData: FormData
+): Promise<PasswordResetState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Informe o e-mail da sua conta.", email };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await siteOrigin()}/auth/confirm?type=recovery`,
+  });
+
+  if (error) {
+    if (error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit") {
+      return {
+        error: "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.",
+        email,
+      };
+    }
+    if (error.code === "email_address_invalid") {
+      return { error: "Informe um e-mail válido.", email };
+    }
+    return { error: "Não foi possível enviar o link agora. Tente novamente.", email };
+  }
+
+  // Same message whether or not the e-mail has an account — never reveal it.
+  return {
+    success: `Se houver uma conta para ${email}, enviamos um link para redefinir a senha. Confira sua caixa de entrada e o spam.`,
+  };
+}
+
+/**
+ * Sets the new password for the session opened by the recovery link
+ * (/auth/confirm → /reset-password).
+ */
+export async function updatePassword(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const password = String(formData.get("password") ?? "");
+  const passwordConfirm = String(formData.get("password_confirm") ?? "");
+
+  if (password.length < 8) {
+    return { error: "A nova senha precisa ter pelo menos 8 caracteres." };
+  }
+  if (password !== passwordConfirm) {
+    return { error: "As senhas não conferem. Digite a mesma senha nos dois campos." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Seu link de redefinição expirou. Peça um novo link para continuar." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    switch (error.code) {
+      case "same_password":
+        return { error: "A nova senha precisa ser diferente da senha atual." };
+      case "weak_password":
+        return { error: "Senha muito fraca. Use letras, números e pelo menos 8 caracteres." };
+      case "reauthentication_needed":
+      case "session_expired":
+      case "session_not_found":
+        return { error: "Seu link de redefinição expirou. Peça um novo link para continuar." };
+      default:
+        return { error: "Não foi possível atualizar a senha. Tente novamente." };
+    }
+  }
+
+  // Same landing as signIn: middleware sends customers on to /app
+  redirect("/dashboard");
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();

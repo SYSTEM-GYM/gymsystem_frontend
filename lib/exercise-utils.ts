@@ -13,6 +13,15 @@ export const MUSCLE_GROUP_LABELS: Record<string, string> = {
   full_body: "Corpo Inteiro",
 };
 
+/**
+ * Groups offered as filter chips. cardio/full_body are hidden: no imported
+ * exercise maps to them yet (the importer doesn't store the exercise
+ * category), so the chips would always return an empty list.
+ */
+export const FILTERABLE_MUSCLE_GROUPS = Object.entries(MUSCLE_GROUP_LABELS).filter(
+  ([value]) => value !== "cardio" && value !== "full_body",
+);
+
 export function muscleGroupLabel(value: string | null | undefined): string | null {
   if (!value) return null;
   return MUSCLE_GROUP_LABELS[value] ?? value;

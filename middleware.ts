@@ -74,8 +74,10 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // /register uses Supabase Auth signUp + e-mail confirmation (/auth/confirm);
-  // /forgot-password is still UI-only.
+  // /register (signUp) and /forgot-password (resetPasswordForEmail) both send
+  // e-mail links that land on /auth/confirm. /reset-password is deliberately
+  // NOT an auth route: the recovery link opens a session first, and signed-in
+  // users hitting an auth route are bounced to /app.
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname.startsWith(r));
 
   if (!user && !isAuthRoute) {

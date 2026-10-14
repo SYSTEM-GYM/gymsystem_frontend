@@ -784,8 +784,10 @@ const MUSCLE_GROUP_CATEGORIES: { value: string; label: string }[] = [
   { value: "legs", label: "Pernas" },
   { value: "glutes", label: "Glúteos" },
   { value: "core", label: "Core" },
-  { value: "cardio", label: "Cardio" },
-  { value: "full_body", label: "Corpo Inteiro" },
+  // Hidden until a re-import stores exercise categories — no exercise maps to
+  // these groups yet, so the filters would always come back empty.
+  // { value: "cardio", label: "Cardio" },
+  // { value: "full_body", label: "Corpo Inteiro" },
 ];
 
 function VisualExerciseLibraryModal({
