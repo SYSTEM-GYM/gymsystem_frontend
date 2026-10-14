@@ -5,13 +5,33 @@ import { signOut } from "@/app/auth/actions";
 import {
   ArrowLeftStartOnRectangleIcon,
   ChatBubbleLeftRightIcon,
+  CheckCircleIcon,
   ChevronRightIcon,
+  ExclamationCircleIcon,
   ShoppingBagIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { ProfileEditForm } from "./ProfileEditForm";
 
-export default async function StudentProfilePage() {
+// ?email=… is set by /auth/confirm after an e-mail change link is opened
+const EMAIL_CHANGE_NOTICES: Record<string, { ok: boolean; message: string }> = {
+  pending: {
+    ok: true,
+    message: "Link confirmado! Para concluir a troca, abra também o link enviado ao outro endereço de e-mail.",
+  },
+  updated: { ok: true, message: "E-mail atualizado com sucesso!" },
+  error: {
+    ok: false,
+    message: "Link de confirmação inválido ou expirado. Salve o novo e-mail de novo para receber outro link.",
+  },
+};
+
+export default async function StudentProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  const emailNotice = EMAIL_CHANGE_NOTICES[(await searchParams).email ?? ""];
   const supabase = await createClient();
   const {
     data: { user },
@@ -74,6 +94,24 @@ export default async function StudentProfilePage() {
           <p className="text-sm text-zinc-500">{plan}</p>
         </div>
       </div>
+
+      {emailNotice && (
+        <div
+          role={emailNotice.ok ? "status" : "alert"}
+          className={`flex items-start gap-2 text-xs font-medium rounded-xl px-3 py-2.5 border ${
+            emailNotice.ok
+              ? "text-primary bg-primary/10 border-primary/20"
+              : "text-danger bg-danger/10 border-danger/20"
+          }`}
+        >
+          {emailNotice.ok ? (
+            <CheckCircleIcon className="w-4 h-4 shrink-0 mt-px" />
+          ) : (
+            <ExclamationCircleIcon className="w-4 h-4 shrink-0 mt-px" />
+          )}
+          <span>{emailNotice.message}</span>
+        </div>
+      )}
 
       {/* Editable contact data */}
       <ProfileEditForm

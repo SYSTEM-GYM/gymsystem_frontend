@@ -13,6 +13,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Password recovery links (type=recovery — set by Supabase on token_hash
  * links, and by requestPasswordReset's redirectTo on PKCE links) go to
  * /reset-password instead, to choose the new password.
+ *
+ * E-mail change links (type=email_change, from the student profile) go back to
+ * /app/profile?email=pending|updated|error. With "secure e-mail change" both
+ * the old and the new address must confirm: after the first link Supabase
+ * redirects with ?message=… and no code, and user.new_email stays set until
+ * the second one.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -20,6 +26,7 @@ export async function GET(request: NextRequest) {
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const isRecovery = type === "recovery";
+  const isEmailChange = type === "email_change";
 
   const supabase = await createClient();
   let user: User | null = null;
@@ -30,6 +37,14 @@ export async function GET(request: NextRequest) {
   } else if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) user = data.user;
+  }
+
+  if (isEmailChange) {
+    let status: "pending" | "updated" | "error";
+    if (user) status = user.new_email ? "pending" : "updated";
+    else if (!code && !tokenHash && searchParams.get("message")) status = "pending";
+    else status = "error";
+    return NextResponse.redirect(new URL(`/app/profile?email=${status}`, request.url));
   }
 
   if (!user) {

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site-origin";
 
 export type UpdateProfileResult =
   | { ok: true; message: string }
@@ -41,10 +42,14 @@ export async function updateStudentProfile(input: {
     return { ok: false, message: "Erro ao salvar o telefone." };
   }
 
-  // Email lives in Supabase Auth; changing it triggers a confirmation email.
+  // Email lives in Supabase Auth; changing it triggers a confirmation email
+  // whose link lands on /auth/confirm (type=email_change → back to profile).
   const emailChanged = email !== (user.email ?? "").toLowerCase();
   if (emailChanged) {
-    const { error: emailError } = await supabase.auth.updateUser({ email });
+    const { error: emailError } = await supabase.auth.updateUser(
+      { email },
+      { emailRedirectTo: `${await siteOrigin()}/auth/confirm?type=email_change` },
+    );
     if (emailError) {
       console.error("updateStudentProfile auth email:", emailError);
       return {

@@ -1,8 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site-origin";
 
 export type AuthActionState = {
   error?: string;
@@ -38,14 +38,6 @@ export type SignUpState = AuthActionState & {
   /** Echoed back on error so the form keeps what the user typed (never passwords). */
   values?: { full_name: string; email: string; phone: string };
 };
-
-/** Absolute URL of this deployment, for the confirmation link redirect. */
-async function siteOrigin(): Promise<string> {
-  // Server Actions are POSTs, so browsers always send Origin (and Next.js
-  // rejects actions whose Origin doesn't match the host).
-  const origin = (await headers()).get("origin");
-  return origin ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
 
 /**
  * Self-service sign-up with Supabase Auth's native flow: the account is
